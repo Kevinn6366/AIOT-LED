@@ -11,8 +11,10 @@ import bottle
 
 if __package__:
     from .panel import Panel
+    from . import firmware
 else:
     from panel import Panel
+    import firmware
 
 
 WEB_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'web')
@@ -35,6 +37,28 @@ def create_server(host, port, fifo):
 def create_app(command_fifo):
     app = bottle.Bottle()
     panel = Panel(os.path.dirname(command_fifo))
+
+    @app.get('/api/system')
+    def system_status():
+        bottle.response.set_header('Cache-Control', 'no-store')
+        return firmware.system_state()
+
+    @app.post('/api/firmware')
+    def update_firmware():
+        size = bottle.request.content_length
+        if bottle.request.content_type != 'application/octet-stream' or not 268 < size <= firmware.LIMIT:
+            bottle.response.status = 400
+            return {'error': '请选择项目生成的 .aiot 固件包'}
+        if not firmware.UPDATE_LOCK.acquire(False):
+            bottle.response.status = 409
+            return {'error': '正在写入固件'}
+        try:
+            return firmware.install(bottle.request.environ['wsgi.input'], size)
+        except (ValueError, OSError) as error:
+            bottle.response.status = 400
+            return {'error': str(error)}
+        finally:
+            firmware.UPDATE_LOCK.release()
 
     def read_panel(channel=-1, mode=-1):
         bottle.response.set_header('Cache-Control', 'no-store')

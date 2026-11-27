@@ -1,0 +1,4 @@
+all:
+{
+    panel_io_wrapper.bit
+}

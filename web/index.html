@@ -31,6 +31,15 @@
       <div class="ps"><strong>LD4</strong><span id="ps-result" role="status">等待操作</span><div class="group"><button data-ps="1">开灯</button><button data-ps="0">关灯</button></div></div>
     </section>
     <p id="error" role="status"></p>
+    <section aria-labelledby="boot-title">
+      <div class="section-head"><h2 id="boot-title">系统与固件</h2><code>SD / PetaLinux</code></div>
+      <p class="note" id="boot-status">正在读取启动状态…</p>
+      <form id="firmware-form" class="ps">
+        <input aria-label="签名固件包" type="file" accept=".aiot" required>
+        <button>写入 SD 卡</button>
+      </form>
+      <p class="note" id="firmware-result" role="status"></p>
+    </section>
   </main>
 </body>
 </html>

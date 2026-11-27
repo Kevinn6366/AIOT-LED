@@ -125,3 +125,36 @@ psButtons.forEach((button) => button.addEventListener('click', async () => {
   finally { psButtons.forEach((b) => { b.disabled = false; }); }
 }));
 update();
+
+async function pollBoot() {
+  const box = document.querySelector('#boot-status');
+  try {
+    const response = await fetch('/api/system', {cache: 'no-store'});
+    if (!response.ok) throw new Error();
+    const s = await response.json();
+    box.textContent = `PetaLinux ${s.kernel} 已启动 · ${s.uptime} 秒 · SD ${s.card ? '已挂载' : '未挂载'} · UIO ${s.uio ? '已绑定' : '待绑定'} · 灯控 ${s.ps && s.pl ? '已运行' : '待就绪'} · ${s.version}`;
+  } catch {
+    box.textContent = '未收到开发板响应，启动状态未知。';
+  } finally {
+    setTimeout(pollBoot, 3000);
+  }
+}
+pollBoot();
+
+document.querySelector('#firmware-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const file = form.querySelector('input').files[0];
+  const button = form.querySelector('button');
+  if (!file || !window.confirm('将所选固件写入 SD 卡备用槽，下次启动生效。确定写入？')) return;
+  const result = document.querySelector('#firmware-result');
+  button.disabled = true;
+  result.textContent = '正在传输、验签和写卡…';
+  try {
+    const response = await fetch('/api/firmware', {method: 'POST',
+      headers: {'Content-Type': 'application/octet-stream'}, body: file});
+    const reply = await response.json();
+    result.textContent = response.ok ? `槽 ${reply.slot.toUpperCase()} 已写入并校验，下次启动生效。` : reply.error;
+  } catch { result.textContent = '连接中断，请核对启动槽后再试。'; }
+  finally { button.disabled = false; }
+});

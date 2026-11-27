@@ -3,3 +3,4 @@
 *.bit binary
 *.hdf binary
 *.dtbo binary
+device/S98aiot text eol=lf

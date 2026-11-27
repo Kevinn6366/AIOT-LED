@@ -1,0 +1,43 @@
+#!/bin/sh
+# SysV runlevel 5 startup, installed in the AIOT FIT's initramfs.
+[ "${1:-start}" = start ] || exit 0
+set -eu
+dir=/tmp/aiot-led
+mkdir -p "$dir"
+cd "$dir"
+echo "[AIOT] PetaLinux started" > /dev/console
+exec >>boot.log 2>&1
+ip link set eth0 up
+ip addr show eth0 | grep -q '169\.254\.155\.221/16 ' || ip addr add 169.254.155.221/16 dev eth0
+tar xzf /opt/aiot/board.tgz
+chmod +x build/python-arm build/led-control build/artifacts/panel-io.elf
+export PYTHONHOME="$dir" LD_LIBRARY_PATH="$dir/lib" PYTHONPATH="$dir/build/python"
+build/python-arm -u server/app.py --fifo "$dir/commands" --host 169.254.155.221 >web.log 2>&1 </dev/null &
+echo $! >web.pid
+echo loading >boot-stage
+for chip in /sys/class/gpio/gpiochip*; do
+    [ "$(cat "$chip/label")" = zynq_gpio ] || continue
+    n=$(($(cat "$chip/base") + 7))
+    [ -d "/sys/class/gpio/gpio$n" ] || echo "$n" >/sys/class/gpio/export
+    echo low >"/sys/class/gpio/gpio$n/direction"
+    build/led-control "$dir/commands" "/sys/class/gpio/gpio$n/value" >ps.log 2>&1 </dev/null &
+    echo $! >ps.pid
+done
+dev=/sys/bus/platform/devices/41200000.gpio
+if [ "$(basename "$(readlink "$dev/driver" || true)")" = xilinx-gpio ]; then
+    echo 41200000.gpio >"$dev/driver/unbind"
+fi
+echo 0 >/sys/class/fpga_manager/fpga0/flags
+echo aiot-panel.bin >/sys/class/fpga_manager/fpga0/firmware
+sh device/start-panel.sh "$dir" >pl.log 2>&1 </dev/null &
+echo $! >pl.pid
+for attempt in 1 2 3 4 5; do
+    if [ -p pl-commands ] && kill -0 "$(cat pl.pid)" 2>/dev/null; then
+        echo ready >boot-stage
+        echo "[AIOT] ready http://169.254.155.221:8080/" >/dev/console
+        exit 0
+    fi
+    sleep 1
+done
+echo pl-failed >boot-stage
+exit 1

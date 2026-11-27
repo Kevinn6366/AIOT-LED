@@ -1,0 +1,27 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZYBO 启动监视</title>
+<style>
+body{font:16px/1.6 "Microsoft YaHei",sans-serif;background:#f3f5f6;color:#20343e;margin:0}
+header{background:#20343e;color:white;padding:14px 6vw;border-bottom:3px solid #16a6a1}
+main{max-width:720px;margin:32px auto;padding:0 16px}dl{background:white;border:1px solid #cbd4d8;padding:16px 24px}
+dt{color:#526772;font-size:14px}dd{margin:0 0 12px}a{color:#075d60}
+</style>
+<header>AIOT-LED · 本机维护</header><main><h1>开发板启动监视</h1>
+<dl><dt>电脑串口</dt><dd id="port">检测中</dd><dt>最近一次串口启动消息</dt><dd id="event">等待消息</dd>
+<dt>网络与 PetaLinux</dt><dd id="network">检测中</dd><dt>UIO 与灯控进程</dt><dd id="service">等待系统</dd></dl>
+<a href="http://169.254.155.221:8080/">打开灯控及 SD 固件升级页面</a></main>
+<script>
+async function refresh() {
+  const show=(id,text)=>document.getElementById(id).textContent=text;
+  try {
+    const s=await (await fetch('/status',{cache:'no-store'})).json();
+    show('port',s.port);show('event',[s.time,s.event].filter(Boolean).join(' · '));
+    const b=s.board;
+    show('network',b?'已连接 · Linux '+b.kernel+' · 本次已运行 '+b.uptime+' 秒':'板端网页未响应');
+    show('service',b?('SD '+(b.card?'已挂载':'未挂载')+' · UIO '+(b.uio?'已绑定':'待绑定')+' · PS '+(b.ps?'就绪':'等待')+' · PL '+(b.pl?'就绪':'等待')):'等待板端回报');
+  } catch {show('network','本机监视服务未响应');show('service','未知');}
+  finally {setTimeout(refresh,1500);}
+}
+refresh();
+</script></html>
