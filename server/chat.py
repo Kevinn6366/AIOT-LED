@@ -2,8 +2,33 @@
 import http.client
 import json
 import threading
+import time
 
 import bottle
+
+
+PREFIX = ('<|im_start|>system\n你是一个中文助手。请简短、准确地回答。<|im_end|>\n'
+          '<|im_start|>user\n')
+
+
+def warm_prefix():
+    # Prime only the shared instruction, before accepting interactive questions.
+    for _ in range(120):
+        conn = http.client.HTTPConnection('127.0.0.1', 8091, timeout=120)
+        try:
+            body = json.dumps(dict(prompt=PREFIX, n_predict=1, cache_prompt=True,
+                                   temperature=0))
+            conn.request('POST', '/completion', body, {'Content-Type': 'application/json'})
+            response = conn.getresponse()
+            data = response.read()
+            if response.status == 200 and json.loads(data.decode('utf-8')).get('stop'):
+                return True
+        except (OSError, ValueError, http.client.HTTPException):
+            pass
+        finally:
+            conn.close()
+        time.sleep(1)
+    return False
 
 
 def register(app):
@@ -23,8 +48,7 @@ def register(app):
             return {'error': '开发板正在回答另一个问题'}
         conn = http.client.HTTPConnection('127.0.0.1', 8091, timeout=180)
         try:
-            prompt = ('<|im_start|>system\n你是一个中文助手。请简短、准确地回答。<|im_end|>\n'
-                      '<|im_start|>user\n' + question.strip() + '<|im_end|>\n<|im_start|>assistant\n')
+            prompt = PREFIX + question.strip() + '<|im_end|>\n<|im_start|>assistant\n'
             body = json.dumps(dict(prompt=prompt, n_predict=80, temperature=0,
                                    stream=True, cache_prompt=True, stop=['<|im_end|>']))
             conn.request('POST', '/completion', body, {'Content-Type': 'application/json'})
@@ -56,3 +80,7 @@ def register(app):
                 active.release()
         bottle.response.content_type = 'application/x-ndjson'
         return frames()
+
+
+if __name__ == '__main__':
+    raise SystemExit(0 if warm_prefix() else 1)

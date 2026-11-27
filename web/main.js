@@ -158,6 +158,17 @@ restart.addEventListener('click', async () => {
   }
 });
 
+let chatReady = false;
+let chatBusy = false;
+function setChatReady(ready) {
+  const status = document.querySelector('#chat-status');
+  if (!chatBusy && (!ready || !chatReady)) {
+    status.textContent = ready ? '模型已就绪，每次提问独立作答。' : '等待开发板加载模型并预热…';
+  }
+  chatReady = ready;
+  document.querySelector('#chat-form button').disabled = !ready || chatBusy;
+}
+
 let gptReady = false;
 let generating = false;
 const gptButton = document.querySelector('#gpt-form button');
@@ -177,6 +188,7 @@ async function pollBoot() {
     if (!response.ok) throw new Error();
     const s = await response.json();
     setGptReady(Boolean(s.gpt));
+    setChatReady(Boolean(s.qwen));
     bootId = s.boot_id;
     const ready = s.stage === 'ready' && s.ps && s.pl && s.uio && s.card;
     if (restarting && bootId !== restarting && ready) {
@@ -187,6 +199,7 @@ async function pollBoot() {
     box.textContent = `PetaLinux ${s.kernel} 已启动 · ${s.uptime} 秒 · SD ${s.card ? '已挂载' : '未挂载'} · UIO ${s.uio ? '已绑定' : '待绑定'} · 灯控 ${s.ps && s.pl ? '已运行' : '待就绪'} · ${s.version}`;
   } catch {
     setGptReady(false);
+    setChatReady(false);
     restart.disabled = true;
     box.textContent = '未收到开发板响应，启动状态未知。';
   } finally {
@@ -254,6 +267,7 @@ document.querySelector('#chat-form').addEventListener('submit', async (event) =>
   const answer = document.querySelector('#chat-answer');
   const status = document.querySelector('#chat-status');
   button.disabled = true;
+  chatBusy = true;
   answer.textContent = '';
   status.textContent = '开发板正在读取问题…';
   const start = performance.now();
@@ -289,6 +303,7 @@ document.querySelector('#chat-form').addEventListener('submit', async (event) =>
   } catch (error) {
     status.textContent = error.message || '未收到板端回答';
   } finally {
-    button.disabled = false;
+    chatBusy = false;
+    button.disabled = !chatReady;
   }
 });

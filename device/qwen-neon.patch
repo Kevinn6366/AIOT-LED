@@ -1,0 +1,41 @@
+diff --git a/ggml/src/ggml-cpu-impl.h b/ggml/src/ggml-cpu-impl.h
+index 5b45155..36e0b5b 100644
+--- a/ggml/src/ggml-cpu-impl.h
++++ b/ggml/src/ggml-cpu-impl.h
+@@ -393,7 +393,9 @@ inline static int32x4_t ggml_vdotq_s32(int32x4_t acc, int8x16_t a, int8x16_t b)
+ #define GGML_COMPUTE_FP16_TO_FP32(x) ggml_compute_fp16_to_fp32(x)
+ #define GGML_COMPUTE_FP32_TO_FP16(x) ggml_compute_fp32_to_fp16(x)
+
++#if defined(__aarch64__) || defined(__ARM_FP16_FORMAT_ALTERNATIVE) || (__ARM_FP & 2)
+ #define GGML_FP16_TO_FP32(x) ggml_compute_fp16_to_fp32(x)
++#endif
+
+ static inline float ggml_compute_fp16_to_fp32(ggml_fp16_t h) {
+     ggml_fp16_internal_t tmp;
+diff --git a/ggml/src/ggml-quants.c b/ggml/src/ggml-quants.c
+index 7aa6dce..1e18764 100644
+--- a/ggml/src/ggml-quants.c
++++ b/ggml/src/ggml-quants.c
+@@ -4145,6 +4145,22 @@ void ggml_vec_dot_q4_0_q8_0(int n, float * restrict s, size_t bs, const void * r
+             break;
+     }
+
++#elif defined(__ARM_NEON) && !defined(__aarch64__)
++    // Q4 values are in [-8, 7]. Four Q4 * Q8 products fit in an int16 lane.
++    float32x4_t acc = vdupq_n_f32(0);
++    for (; ib < nb; ++ib) {
++        const uint8x16_t packed = vld1q_u8(x[ib].qs);
++        const int8x16_t low = vsubq_s8(vreinterpretq_s8_u8(vandq_u8(packed, vdupq_n_u8(15))), vdupq_n_s8(8));
++        const int8x16_t high = vsubq_s8(vreinterpretq_s8_u8(vshrq_n_u8(packed, 4)), vdupq_n_s8(8));
++        const int8_t * q = y[ib].qs;
++        int16x8_t sum = vmull_s8(vget_low_s8(low), vld1_s8(q));
++        sum = vmlal_s8(sum, vget_high_s8(low), vld1_s8(q + 8));
++        sum = vmlal_s8(sum, vget_low_s8(high), vld1_s8(q + 16));
++        sum = vmlal_s8(sum, vget_high_s8(high), vld1_s8(q + 24));
++        const float scale = GGML_FP16_TO_FP32(x[ib].d) * GGML_FP16_TO_FP32(y[ib].d);
++        acc = vmlaq_n_f32(acc, vcvtq_f32_s32(vpaddlq_s16(sum)), scale);
++    }
++    sumf = vaddvq_f32(acc);
+ #elif defined(__ARM_NEON)
+     float32x4_t sumv0 = vdupq_n_f32(0.0f);
+     float32x4_t sumv1 = vdupq_n_f32(0.0f);

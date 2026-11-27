@@ -53,6 +53,8 @@ for attempt in 1 2 3 4 5; do
             chmod +x build/artifacts/llama-server.elf
             build/artifacts/llama-server.elf -m "$model" -t 2 -c 512 -b 32 -ub 32 \
                 --parallel 1 --threads-http 2 --host 127.0.0.1 --port 8091 >qwen.log 2>&1 </dev/null &
+            echo $! >qwen.pid
+            (build/python-arm server/chat.py && touch qwen-ready) >qwen-warm.log 2>&1 </dev/null &
         fi
         echo ready >boot-stage
         echo "[AIOT] ready http://169.254.155.221:8080/" >/dev/console
