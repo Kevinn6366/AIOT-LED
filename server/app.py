@@ -2,12 +2,28 @@
 
 import argparse
 import os
+import socketserver
 import stat
+from wsgiref.simple_server import make_server, WSGIRequestHandler, WSGIServer
 
 import bottle
 
 
 WEB_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'web')
+
+
+class LedServer(socketserver.ThreadingMixIn, WSGIServer):
+    """Handle browser preconnections independently of active requests."""
+
+    daemon_threads = True
+
+
+class LedHandler(WSGIRequestHandler):
+    timeout = 10
+
+
+def create_server(host, port, fifo):
+    return make_server(host, port, create_app(fifo), LedServer, LedHandler)
 
 
 def create_app(command_fifo):
@@ -53,4 +69,8 @@ if __name__ == '__main__':
     parser.add_argument('--host', default='0.0.0.0')
     parser.add_argument('--port', type=int, default=8080)
     args = parser.parse_args()
-    create_app(args.fifo).run(host=args.host, port=args.port)
+    httpd = create_server(args.host, args.port, args.fifo)
+    try:
+        httpd.serve_forever()
+    finally:
+        httpd.server_close()

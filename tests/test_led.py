@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+import socket
 import subprocess
 import tempfile
 import threading
@@ -9,9 +10,8 @@ import time
 import unittest
 import urllib.error
 import urllib.request
-from wsgiref.simple_server import make_server
 
-from server.app import create_app
+from server.app import create_server
 
 
 class LedTest(unittest.TestCase):
@@ -21,13 +21,15 @@ class LedTest(unittest.TestCase):
             fifo = Path(runtime, 'commands')
             value = Path(runtime, 'value')
             value.write_text('0')
-            httpd = make_server('127.0.0.1', 0, create_app(str(fifo)))
+            httpd = create_server('127.0.0.1', 0, str(fifo))
             url = 'http://127.0.0.1:%d' % httpd.server_port
             thread = threading.Thread(target=httpd.serve_forever)
             thread.start()
             self.addCleanup(httpd.server_close)
             self.addCleanup(thread.join)
             self.addCleanup(httpd.shutdown)
+            idle = socket.create_connection(httpd.server_address)
+            self.addCleanup(idle.close)
 
             def post(data):
                 request = urllib.request.Request(
