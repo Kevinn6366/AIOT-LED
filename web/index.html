@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZYBO Z7-20 灯光控制</title>
+<style>
+  :root { font: 100%/1.6 "Microsoft YaHei", sans-serif; color: #173332; background: #edf3ef; }
+  main { max-width: 30rem; margin: 12vh auto; padding: 2rem; background: white; border-radius: 1rem; }
+  h1 { font-size: 1.65rem; }
+  button { font: inherit; padding: .6rem 1.5rem; border: 1px solid #126052; border-radius: .5rem; cursor: pointer; }
+  button[value="1"] { background: #126052; color: white; }
+  button[value="0"] { background: white; color: #126052; }
+  button:disabled { opacity: .6; }
+</style>
+<main>
+  <h1>ZYBO Z7-20 灯光控制</h1>
+  <form>
+    <button type="button" value="1">开灯</button>
+    <button type="button" value="0">关灯</button>
+  </form>
+  <p role="status">等待操作</p>
+</main>
+<script src="/main.js"></script>
+</html>
