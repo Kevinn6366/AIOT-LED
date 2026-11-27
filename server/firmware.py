@@ -1,6 +1,7 @@
 """Stage a developer-signed FIT on the board's SD card for the next boot."""
 
 import hashlib
+import mmap
 import os
 import shutil
 import subprocess
@@ -27,15 +28,28 @@ def boot_env(slot):
             'then if iminfo ${netstart}; then bootm ${netstart}; fi; fi\n' % slot)
 
 
+def ld4_output():
+    # Zynq-7000 GPIO bank 0 DATA drives LD4 on MIO7; DATA_RO samples inputs.
+    try:
+        with open('/dev/mem', 'rb', buffering=0) as memory:
+            with mmap.mmap(memory.fileno(), 4096, flags=mmap.MAP_SHARED,
+                           prot=mmap.PROT_READ, offset=0xe000a000) as bank:
+                return bool(struct.unpack_from('<I', bank, 0x40)[0] & (1 << 7))
+    except (OSError, ValueError, OverflowError):
+        return None
+
+
 def system_state():
     def running(name):
         pid = read_text('/tmp/aiot-led/' + name + '.pid')
         return pid.isdigit() and os.path.isdir('/proc/' + pid)
     env = read_text(CARD + '/uEnv.txt')
-    return dict(kernel=os.uname().release, boot_id=read_text('/proc/sys/kernel/random/boot_id'),
+    return dict(ld4=ld4_output() if running('ps') else None, kernel=os.uname().release,
+                boot_id=read_text('/proc/sys/kernel/random/boot_id'),
                 uptime=int(float(read_text('/proc/uptime', '0').split()[0])),
                 version=read_text('/etc/aiot-version', '临时部署'),
                 stage=read_text('/tmp/aiot-led/boot-stage', 'unknown'),
+                gpt=os.path.exists('/tmp/aiot-led/gpt-uio'),
                 ps=running('ps'), pl=running('pl'), uio=os.path.exists('/dev/uio1'),
                 next_slot=next((s for s in ('a', 'b') if env == boot_env(s).strip()), ''),
                 card=os.path.ismount(CARD))

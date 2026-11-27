@@ -13,7 +13,7 @@ test -s build/python-arm
 chmod +x build/python-arm
 tar czf build/board.tgz --exclude=.debug --exclude=__pycache__ \
     --exclude='*.a' --exclude='*.pyc' --exclude=test --exclude=tests \
-    web server/app.py server/panel.py server/firmware.py device/start-panel.sh build/artifacts/panel-io.elf build/artifacts/rgb-overlay.dtbo \
+    web server/gpt.py build/artifacts/gpt.elf server/app.py server/panel.py server/firmware.py device/start-panel.sh build/artifacts/panel-io.elf build/artifacts/rgb-overlay.dtbo \
     build/led-control build/python-arm build/python/bottle.py \
     -C "$stdlib" lib/python3.5 lib/libpython3.5m.so.1.0 \
     -C "$tmp/sysroots-components/cortexa9t2hf-neon/libgcc" lib/libgcc_s.so.1

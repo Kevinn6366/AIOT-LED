@@ -1,6 +1,10 @@
 # Source inside Vivado 2019.1 GUI, from the project repository.
 set root [file normalize [file join [file dirname [info script]] ..]]
-create_project panel $root/build/rgb-vivado -part xc7z020clg400-1
+set project_dir $root/build/rgb-vivado
+if {[info exists ::env(AIOT_GPT_RTL)]} {
+    set project_dir $root/build/gpt-panel
+}
+create_project panel $project_dir -part xc7z020clg400-1
 set_property board_part [lindex [get_board_parts digilentinc.com:zybo-z7-20:part0:*] end] [current_project]
 create_bd_design panel_io
 proc ip {name kind config} {
@@ -64,6 +68,28 @@ wire output_value/Res feedback/In1
 wire pwm_sample/dout feedback/In2
 wire identity/dout feedback/In3
 wire feedback/dout control/gpio2_io_i
+if {[info exists ::env(AIOT_GPT_RTL)]} {
+    set rtl [file normalize $::env(AIOT_GPT_RTL)]
+    # Vivado runs synthesis in a separate directory. Resolve the Spinal ROM files there.
+    set fd [open $rtl/ZyboGPTTop.v r]
+    set source [read $fd]
+    close $fd
+    foreach rom [glob $rtl/*.bin] {
+        set name [file tail $rom]
+        set source [string map [list "\"$name\"" "\"$rom\""] $source]
+    }
+    set core $project_dir/ZyboGPTTop.v
+    set fd [open $core w]
+    puts -nonewline $fd $source
+    close $fd
+    add_files -norecurse [list $core $rtl/ZyboGPTWrapper.v]
+    update_compile_order -fileset sources_1
+    create_bd_cell -type module -reference ZyboGPTWrapper language_model
+    apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config {Master "/ps/M_AXI_GP0" Slave "/language_model/s_axi" Clk_master "Auto" Clk_slave "Auto" Clk_xbar "Auto"} [get_bd_intf_pins language_model/s_axi]
+    set mapped [get_bd_addr_segs -of_objects [get_bd_addr_spaces ps/Data] -filter {NAME =~ *language_model*}]
+    if {[llength $mapped] != 1} {error "Missing language model address segment"}
+    set_property offset 0x43C00000 $mapped
+}
 regenerate_bd_layout
 validate_bd_design
 save_bd_design
@@ -78,6 +104,7 @@ launch_runs impl_1 -to_step write_bitstream -jobs 4
 wait_on_run impl_1
 if {[get_property PROGRESS [get_runs impl_1]] ne "100%"} {error "Implementation failed"}
 set out $root/build/artifacts
+if {[info exists ::env(AIOT_GPT_RTL)]} {set out $root/build/gpt-artifacts}
 file mkdir $out
 set run [get_property DIRECTORY [get_runs impl_1]]
 file copy -force $run/panel_io_wrapper.bit $out/panel_io_wrapper.bit

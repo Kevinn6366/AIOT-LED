@@ -158,12 +158,25 @@ restart.addEventListener('click', async () => {
   }
 });
 
+let gptReady = false;
+let generating = false;
+const gptButton = document.querySelector('#gpt-form button');
+function setGptReady(ready) {
+  const status = document.querySelector('#gpt-status');
+  if (!generating && (!ready || !gptReady)) {
+    status.textContent = ready ? '推理核就绪' : '推理核未上线';
+  }
+  gptReady = ready;
+  gptButton.disabled = generating || !ready;
+}
+
 async function pollBoot() {
   const box = document.querySelector('#boot-status');
   try {
     const response = await fetch('/api/system', {cache: 'no-store'});
     if (!response.ok) throw new Error();
     const s = await response.json();
+    setGptReady(Boolean(s.gpt));
     bootId = s.boot_id;
     const ready = s.stage === 'ready' && s.ps && s.pl && s.uio && s.card;
     if (restarting && bootId !== restarting && ready) {
@@ -173,6 +186,7 @@ async function pollBoot() {
     restart.disabled = !ready || Boolean(restarting);
     box.textContent = `PetaLinux ${s.kernel} 已启动 · ${s.uptime} 秒 · SD ${s.card ? '已挂载' : '未挂载'} · UIO ${s.uio ? '已绑定' : '待绑定'} · 灯控 ${s.ps && s.pl ? '已运行' : '待就绪'} · ${s.version}`;
   } catch {
+    setGptReady(false);
     restart.disabled = true;
     box.textContent = '未收到开发板响应，启动状态未知。';
   } finally {
@@ -180,3 +194,55 @@ async function pollBoot() {
   }
 }
 pollBoot();
+document.querySelector('#gpt-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const prompt = form.elements.prompt.value;
+  const seed = Number(form.elements.seed.value);
+  const output = document.querySelector('#gpt-output');
+  const status = document.querySelector('#gpt-status');
+  const button = form.querySelector('button');
+  if (!/^[ -~]+$/.test(prompt)) {
+    status.textContent = '请输入可打印的英文字符。';
+    return;
+  }
+  generating = true;
+  button.disabled = true;
+  output.textContent = prompt;
+  status.textContent = '等待开发板…';
+  const start = performance.now();
+  let first, cycles = 0, count = 0, complete = false;
+  try {
+    const response = await fetch('/api/generate', {method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({prompt, seed, length: Math.min(64, 128 - prompt.length)})});
+    if (!response.ok) throw new Error((await response.json()).error);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, {stream: true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        const frame = JSON.parse(line);
+        if (frame.error) throw new Error(frame.error);
+        if (frame.done) { complete = true; continue; }
+        if (!count) first = performance.now() - start;
+        output.textContent += frame.char;
+        cycles = frame.cycles;
+        count++;
+      }
+    }
+    if (!complete || !count || !cycles) throw new Error('未收到完整回执');
+    const rate = Math.round((prompt.length + count - 1) * 50000000 / cycles);
+    status.textContent = `已生成 ${count} 字符 · PL ${rate} 字符/秒（含提示词） · 首字符 ${first.toFixed(1)} ms`;
+  } catch (error) {
+    status.textContent = error.message || '推理请求失败';
+  } finally {
+    generating = false;
+    button.disabled = !gptReady;
+  }
+});

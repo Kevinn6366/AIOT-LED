@@ -11,10 +11,11 @@ import bottle
 
 if __package__:
     from .panel import Panel
-    from . import firmware
+    from . import firmware, gpt
 else:
     from panel import Panel
     import firmware
+    import gpt
 
 
 WEB_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'web')
@@ -36,6 +37,7 @@ def create_server(host, port, fifo):
 
 def create_app(command_fifo):
     app = bottle.Bottle()
+    gpt.register(app, os.path.dirname(command_fifo))
     panel = Panel(os.path.dirname(command_fifo))
 
     @app.get('/api/system')

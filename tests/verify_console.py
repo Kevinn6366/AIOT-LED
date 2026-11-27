@@ -17,6 +17,23 @@ def call(path, payload=None):
 
 
 def verify():
+    system = call('/api/system')
+    ld4 = system.get('ld4')
+    if system.get('gpt') and type(ld4) is not bool:
+        raise AssertionError('LD4 output register unavailable')
+    if ld4 is not None:
+        try:
+            for on in (True, False):
+                call('/api/led', {'on': on})
+                for _ in range(10):
+                    if call('/api/system')['ld4'] is on:
+                        break
+                    time.sleep(.05)
+                else:
+                    raise AssertionError('LD4 GPIO readback mismatch')
+            print('PASS: LD4 on/off GPIO readback')
+        finally:
+            call('/api/led', {'on': ld4})
     was_synced = call('/api/panel')['rgb_sync']
     original = call('/api/rgb/sync', {'on': False})
     try:

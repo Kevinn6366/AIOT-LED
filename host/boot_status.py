@@ -54,7 +54,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def board_request(self, path, size=0):
         conn = http.client.HTTPConnection('169.254.155.221', 8080,
-                                          timeout=90 if path == '/api/firmware' else 3)
+                                          timeout=90 if path == '/api/firmware' else 5 if path == '/api/generate' else 3)
         try:
             conn.putrequest(self.command, path)
             if self.command == 'POST':
@@ -68,7 +68,19 @@ class Handler(BaseHTTPRequestHandler):
                 conn.send(chunk)
                 size -= len(chunk)
             response = conn.getresponse()
-            self.reply(response.status, response.read(), 'application/json')
+            if path == '/api/generate' and response.status == 200:
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/x-ndjson')
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                try:
+                    for line in response:
+                        self.wfile.write(line)
+                        self.wfile.flush()
+                except (OSError, http.client.HTTPException):
+                    self.close_connection = True
+            else:
+                self.reply(response.status, response.read(), 'application/json')
         except (OSError, http.client.HTTPException):
             self.reply(503, json.dumps({'error': '开发板未响应，请查看启动监视'}).encode(),
                        'application/json')
@@ -105,7 +117,7 @@ class Handler(BaseHTTPRequestHandler):
         if host not in LOCAL_HOSTS or self.headers.get('Origin') != 'http://' + host:
             return self.send_error(403)
         path = urlsplit(self.path).path
-        if not re.fullmatch(r'/api/(led|panel/[0-3]|rgb/(?:[56]|sync)|firmware|reboot)', path):
+        if not re.fullmatch(r'/api/(led|panel/[0-3]|rgb/(?:[56]|sync)|firmware|reboot|generate)', path):
             return self.send_error(404)
         firmware = path == '/api/firmware'
         if self.headers.get_content_type() != ('application/octet-stream' if firmware else 'application/json'):

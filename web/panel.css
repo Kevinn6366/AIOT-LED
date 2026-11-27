@@ -43,3 +43,8 @@ button:focus-visible { outline:3px solid #2883c4; position:relative; }
 .rgb-color { display:inline-flex; align-items:center; gap:10px; } .rgb-color input { width:38px; height:32px; border:1px solid #a7b7be; padding:2px; background:white; cursor:pointer; }
 #host-tools { margin:-10px 0 18px; }
 #host-tools a { color:#075d60; }
+
+#gpt-form { display:flex; align-items:end; flex-wrap:wrap; gap:12px; margin:16px 0; }
+#gpt-form label { display:grid; gap:4px; }
+#gpt-form input { padding:6px; font:inherit; }
+#gpt-output { white-space:pre-wrap; overflow-wrap:anywhere; font-size:1rem; }

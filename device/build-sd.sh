@@ -13,8 +13,11 @@ if grep -q "$(printf '\r')" device/S98aiot; then
 fi
 cp device/S98aiot "$tree/etc/rc5.d/S98aiot"
 chmod 755 "$tree/etc/rc5.d/S98aiot"
+if [ -n "${AIOT_BIT_BIN:-}" ]; then
+    cp build/artifacts/gpt-overlay.dtbo "$tree/etc/aiot-gpt.dtbo"
+fi
 cp build/board.tgz "$tree/opt/aiot/"
-cp build/artifacts/panel_io_wrapper.bit.bin "$tree/lib/firmware/aiot-panel.bin"
+cp "${AIOT_BIT_BIN:-build/artifacts/panel_io_wrapper.bit.bin}" "$tree/lib/firmware/aiot-panel.bin"
 cp "$out/public.hex" "$tree/etc/aiot-public.hex"
 sha256sum build/board.tgz | cut -c 1-12 > "$tree/etc/aiot-version"
 deploy="$images/../../build/tmp/deploy/images/plnx-zynq7"
@@ -32,6 +35,9 @@ file /etc/rc5.d/S98aiot $tree/etc/rc5.d/S98aiot 0755 0 0
 file /etc/aiot-public.hex $tree/etc/aiot-public.hex 0644 0 0
 file /etc/aiot-version $tree/etc/aiot-version 0644 0 0
 EOF
+if [ -n "${AIOT_BIT_BIN:-}" ]; then
+    echo "file /etc/aiot-gpt.dtbo $tree/etc/aiot-gpt.dtbo 0644 0 0" >> "$out/initramfs.list"
+fi
 "$gen" "$out/initramfs.list" >> "$out/rootfs.cpio"
 gzip -n -c "$out/rootfs.cpio" > "$out/rootfs.gz"
 sed -e 's|/incbin/("linux.bin")|/incbin/("kernel")|' \

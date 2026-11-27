@@ -36,6 +36,18 @@ sh device/start-panel.sh "$dir" >pl.log 2>&1 </dev/null &
 echo $! >pl.pid
 for attempt in 1 2 3 4 5; do
     if [ -p pl-commands ] && kill -0 "$(cat pl.pid)" 2>/dev/null; then
+        if [ -f /etc/aiot-gpt.dtbo ]; then
+            gpt=/sys/bus/platform/devices/43c00000.language-model
+            overlay=/sys/kernel/config/device-tree/overlays/aiot-gpt
+            mkdir -p "$overlay"
+            cat /etc/aiot-gpt.dtbo >"$overlay/dtbo"
+            echo uio_pdrv_genirq >"$gpt/driver_override"
+            echo 43c00000.language-model >/sys/bus/platform/drivers/uio_pdrv_genirq/bind
+            set -- "$gpt"/uio/uio*
+            test -d "$1"
+            ln -s "/dev/${1##*/}" "$dir/gpt-uio"
+            chmod +x build/artifacts/gpt.elf
+        fi
         echo ready >boot-stage
         echo "[AIOT] ready http://169.254.155.221:8080/" >/dev/console
         exit 0
