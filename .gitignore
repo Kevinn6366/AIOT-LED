@@ -6,7 +6,13 @@ vivado*.log
 *.gen/
 *.sim/
 *.hw/
-build/
+/build/*
+!/build/artifacts/
+/build/artifacts/*
+!/build/artifacts/panel_io_wrapper.bit
+!/build/artifacts/panel.hdf
+!/build/artifacts/panel-io.elf
+!/build/artifacts/led-control.elf
 __pycache__/
 .venv/
 *.o

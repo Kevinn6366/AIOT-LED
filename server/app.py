@@ -8,6 +8,11 @@ from wsgiref.simple_server import make_server, WSGIRequestHandler, WSGIServer
 
 import bottle
 
+if __package__:
+    from .panel import Panel
+else:
+    from panel import Panel
+
 
 WEB_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'web')
 
@@ -28,6 +33,33 @@ def create_server(host, port, fifo):
 
 def create_app(command_fifo):
     app = bottle.Bottle()
+    panel = Panel(os.path.dirname(command_fifo))
+
+    def read_panel(channel=-1, mode=-1):
+        bottle.response.set_header('Cache-Control', 'no-store')
+        try:
+            return panel.sample(channel, mode)
+        except (OSError, ValueError):
+            bottle.response.status = 503
+            return {'error': 'PL 状态不可用'}
+
+    @app.get('/api/panel')
+    def panel_status():
+        return read_panel()
+
+    @app.post('/api/panel/<channel:int>')
+    def panel_command(channel):
+        data = bottle.request.json
+        modes = {'switch': -1, 'off': 0, 'on': 1}
+        mode = data.get('mode') if isinstance(data, dict) else None
+        if channel not in range(4) or not isinstance(mode, str) or mode not in modes:
+            bottle.response.status = 400
+            return {'error': '无效的通道或操作'}
+        return read_panel(channel, modes[mode])
+
+    @app.get('/panel.css')
+    def stylesheet():
+        return bottle.static_file('panel.css', root=WEB_ROOT)
 
     @app.get('/')
     def index():

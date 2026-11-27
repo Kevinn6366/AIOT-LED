@@ -1,0 +1,4 @@
+*.sh text eol=lf
+*.elf binary
+*.bit binary
+*.hdf binary
