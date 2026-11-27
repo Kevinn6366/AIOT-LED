@@ -1,0 +1,13 @@
+.Xil/
+*.jou
+vivado*.log
+*.runs/
+*.cache/
+*.gen/
+*.sim/
+*.hw/
+build/
+__pycache__/
+.venv/
+*.o
+.env
