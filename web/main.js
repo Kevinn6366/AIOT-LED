@@ -180,21 +180,3 @@ async function pollBoot() {
   }
 }
 pollBoot();
-
-document.querySelector('#firmware-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const file = form.querySelector('input').files[0];
-  const button = form.querySelector('button');
-  if (!file || !window.confirm('将所选固件写入 SD 卡备用槽，下次启动生效。确定写入？')) return;
-  const result = document.querySelector('#firmware-result');
-  button.disabled = true;
-  result.textContent = '正在传输、验签和写卡…';
-  try {
-    const response = await fetch('/api/firmware', {method: 'POST',
-      headers: {'Content-Type': 'application/octet-stream'}, body: file});
-    const reply = await response.json();
-    result.textContent = response.ok ? `槽 ${reply.slot.toUpperCase()} 已写入并校验，下次启动生效。` : reply.error;
-  } catch { result.textContent = '连接中断，请核对启动槽后再试。'; }
-  finally { button.disabled = false; }
-});

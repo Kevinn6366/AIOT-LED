@@ -6,11 +6,11 @@ SD 卡留在 ZYBO Z7-20，选择 SD 启动，网线接实验电脑。板端每�
 
 电脑运行 `host/open-monitor.ps1` 后，Edge 打开 [本机灯控台](http://127.0.0.1:8089/)。页面、脚本和样式均由电脑从项目目录提供。电脑服务通过网线向板端接口发送数字灯、RGB 开关和颜色指令，并转发签名固件。板端断电时本机页面仍可访问，硬件状态显示离线。
 
-[启动监视页](http://127.0.0.1:8089/boot) 只读 COM3，波特率 115200。需要观察完整启动过程时，在开发板上电前启动电脑服务。电脑首次运行需执行 `python -m pip install --target build/host-python pyserial==3.5`。板端上线后，本机灯控台的「系统与固件」显示运行时间、内核、SD 卡、UIO 和 PS/PL 进程状态。
+[启动监视页](http://127.0.0.1:8089/boot) 只读 COM3，波特率 115200。需要观察完整启动过程时，在开发板上电前启动电脑服务。电脑首次运行需执行 `python -m pip install --target build/host-python pyserial==3.5`。板端上线后，本机灯控台的「系统状态」显示运行时间、内核、SD 卡、UIO 和 PS/PL 进程状态。
 
-## 使用网页更新
+## 维护接口更新
 
-在「系统与固件」选择本机 `build/sd/AIOT-LED.aiot`，点击「写入 SD 卡」。该包包含 Linux 内核、设备树、根文件系统、PL 位流、板端 C 程序和网页。开发板验证 RSA-2048 / SHA-256 签名，将 FIT 写入另一槽，回读 SHA-256 后切换 `uEnv.txt`。等网页提示完成，再重启或断电上电。
+维护时可向本机 `POST /api/firmware` 发送 `build/sd/AIOT-LED.aiot` 的二进制内容。请求使用 `Content-Type: application/octet-stream` 和 `Origin: http://127.0.0.1:8089`。开发板验证签名，将 FIT 写入备用槽并回读 SHA-256。接口返回槽位和校验值后，可重启或断电再上电。
 
 本机页面的「重启开发板」通过网线发起 PetaLinux 正常重启。电脑使用项目配对私钥签署本次 Linux 启动 ID，开发板验签、同步 SD 卡后重启。页面持续轮询，取得新的启动 ID 并确认 SD、UIO、PS 和 PL 全部就绪后显示恢复完成。物理断电后仍需接通开发板电源。启动后 LD0–LD3 跟随拨杆，LD4 和两路 RGB 默认关闭。
 
