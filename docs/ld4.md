@@ -38,3 +38,18 @@ PYTHONPATH=. python3 tests/test_led.py
 ```
 
 测试使用真实 HTTP 请求、命名管道和 C 进程，用临时文件代替 GPIO value，分别验证开、关和错误响应。
+
+## 实板验证（2026-11-27）
+
+ZYBO Z7-20 使用现有 Linux 4.19.0-xilinx-v2019.1 映像。串口核对到 `zynq_gpio` 基址为 902，LD4 使用 GPIO 909。浏览器经有线网口访问板端 8080 端口，依次点击开、关、开。串口读取 GPIO Bank 0 的 DATA 输出寄存器依次得到 `0x0000FE81`、`0x0000FE01`、`0x0000FE81`，对应位 7 为 1、0、1。此次读到的 sysfs value 在开和关时都为 0，故以输出寄存器记录命令执行结果。
+
+该映像未预装 Python。本次使用同版本 PetaLinux 构建中的 ARM Python 3.5.6 和 Bottle 0.13.4，在板端临时目录运行。复现时，在仓库根目录将 Bottle 安装到 `build/python`，再执行 `sh device/package-runtime.sh /路径/到/build/tmp`。可通过环境变量 `RPM2CPIO` 指定构建环境的 rpm2cpio。将生成的 `build/board.tgz` 解压到板端 `/tmp/aiot-led`，切换到该目录执行：
+
+```sh
+chmod +x build/python-arm build/led-control
+export LD_LIBRARY_PATH="$PWD/lib" PYTHONHOME="$PWD" PYTHONPATH="$PWD/build/python"
+# 按上文核实并配置 LD4 的 GPIO、启动 C 程序后运行：
+build/python-arm server/app.py --fifo /tmp/aiot-led/commands --host "$BOARD_IP"
+```
+
+`BOARD_IP` 为板端有线网口已配置的 IPv4 地址。本次临时地址及运行目录均在板端重启后失效。
