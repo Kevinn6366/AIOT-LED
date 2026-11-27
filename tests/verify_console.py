@@ -1,6 +1,7 @@
 """Exercise live lamp commands via the Windows console and restore panel settings."""
 
 import json
+import time
 from urllib.request import ProxyHandler, Request, build_opener
 
 URL = 'http://127.0.0.1:8089'
@@ -16,7 +17,28 @@ def call(path, payload=None):
 
 
 def verify():
-    original = call('/api/panel')
+    was_synced = call('/api/panel')['rgb_sync']
+    original = call('/api/rgb/sync', {'on': False})
+    try:
+        verify_manual(original)
+        call('/api/rgb/sync', {'on': True})
+        colors = set()
+        for _ in range(12):
+            time.sleep(.1)
+            sample = call('/api/panel')
+            first, second = sample['rgb']
+            assert sample['rgb_sync'] and first == second and first['on']
+            colors.add(first['color'])
+        assert len(colors) >= 6, 'rainbow did not advance'
+        restored = call('/api/rgb/sync', {'on': False})
+        assert not restored['rgb_sync'] and restored['rgb'] == original['rgb']
+        print('PASS: synchronized rainbow, %d distinct colors, manual settings restored'
+              % len(colors))
+    finally:
+        call('/api/rgb/sync', {'on': was_synced})
+
+
+def verify_manual(original):
     for channel in range(4):
         bit = 1 << channel
         path = '/api/panel/' + str(channel)

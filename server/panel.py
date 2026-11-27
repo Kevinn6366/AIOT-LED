@@ -31,11 +31,11 @@ class Panel:
                     raise OSError('Panel timeout')
                 for line in os.read(status, 4096).decode('ascii').splitlines():
                     fields = line.split()
-                    if len(fields) == 7 and fields[0] == token:
-                        switches, leds, mask, ld5, ld6, power = map(int, fields[1:])
+                    if len(fields) == 8 and fields[0] == token:
+                        switches, leds, mask, ld5, ld6, power, synced = map(int, fields[1:])
                         rgb = [dict(color='#%06x' % value, on=bool(power & (1 << i)))
                                for i, value in enumerate((ld5, ld6))]
-                        return dict(switches=switches, leds=leds, remote=mask, rgb=rgb)
+                        return dict(switches=switches, leds=leds, remote=mask, rgb=rgb, rgb_sync=bool(synced))
                 raise OSError('Missing sample')
             finally:
                 os.close(status)

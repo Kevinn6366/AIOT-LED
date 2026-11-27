@@ -38,7 +38,18 @@ for (const lamp of [5, 6]) {
   });
 }
 
+const syncButton = document.querySelector('#rgb-sync');
+syncButton.addEventListener('click', () => update('sync', {
+  on: syncButton.getAttribute('aria-pressed') !== 'true'
+}));
+
 function render(sample) {
+  const synced = Boolean(sample && sample.rgb_sync);
+  syncButton.disabled = !sample || typeof sample.rgb_sync !== 'boolean';
+  syncButton.setAttribute('aria-pressed', String(synced));
+  syncButton.textContent = synced ? '停止同步' : '开启同步';
+  document.querySelector('#sync-status').textContent =
+      sample ? (synced ? '双灯同步渐变' : '独立控制') : '等待采样';
   link.textContent = sample ? 'PL 在线' : 'PL 离线';
   link.classList.toggle('live', Boolean(sample));
   clock.textContent = sample ? '采样 ' + new Date().toLocaleTimeString('zh-CN') : '无有效采样';
@@ -58,7 +69,7 @@ function render(sample) {
   Array.from(rgbRows.rows).forEach((row, i) => {
     const state = sample && sample.rgb && sample.rgb[i];
     const picker = row.querySelector('input');
-    picker.disabled = !state;
+    picker.disabled = !state || synced;
     if (state && picker.dataset.confirmed !== state.color) {
       picker.value = state.color;
       picker.dataset.confirmed = state.color;
@@ -70,7 +81,7 @@ function render(sample) {
     lamp.textContent = state ? (state.on ? '开启' : '关闭') : '未知';
     lamp.classList.toggle('on', Boolean(state && state.on));
     row.querySelectorAll('button').forEach((button) => {
-      button.disabled = !state;
+      button.disabled = !state || synced;
       button.setAttribute('aria-pressed', String(Boolean(state && state.on === (button.dataset.on === '1'))));
     });
   });
@@ -83,7 +94,7 @@ async function update(channel, mode) {
   const writing = channel !== undefined;
   if (writing) {
     pending = true;
-    document.querySelectorAll('#channels button, #rgb-channels button, #rgb-channels input')
+    document.querySelectorAll('#channels button, #rgb-channels button, #rgb-channels input, #rgb-sync')
         .forEach((control) => { control.disabled = true; });
   }
   const controller = new AbortController();
@@ -92,7 +103,7 @@ async function update(channel, mode) {
     const options = {cache: 'no-store', signal: controller.signal};
     let url = '/api/panel';
     if (writing) {
-      const rgb = channel === 5 || channel === 6;
+      const rgb = channel === 'sync' || channel === 5 || channel === 6;
       url = (rgb ? '/api/rgb/' : '/api/panel/') + channel;
       Object.assign(options, {method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(rgb ? mode : {mode})});

@@ -105,7 +105,7 @@ class Handler(BaseHTTPRequestHandler):
         if host not in LOCAL_HOSTS or self.headers.get('Origin') != 'http://' + host:
             return self.send_error(403)
         path = urlsplit(self.path).path
-        if not re.fullmatch(r'/api/(led|panel/[0-3]|rgb/[56]|firmware|reboot)', path):
+        if not re.fullmatch(r'/api/(led|panel/[0-3]|rgb/(?:[56]|sync)|firmware|reboot)', path):
             return self.send_error(404)
         firmware = path == '/api/firmware'
         if self.headers.get_content_type() != ('application/octet-stream' if firmware else 'application/json'):

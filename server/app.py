@@ -93,6 +93,14 @@ def create_app(command_fifo):
             return {'error': '无效的通道或操作'}
         return read_panel(channel, modes[mode])
 
+    @app.post('/api/rgb/sync')
+    def sync_rgb():
+        data = bottle.request.json
+        if isinstance(data, dict) and type(data.get('on')) is bool:
+            return read_panel(7, int(data['on']))
+        bottle.response.status = 400
+        return {'error': '请指定同步效果开关'}
+
     @app.post('/api/rgb/<lamp:int>')
     def rgb_command(lamp):
         data = bottle.request.json
