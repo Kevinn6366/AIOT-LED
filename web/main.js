@@ -246,3 +246,49 @@ document.querySelector('#gpt-form').addEventListener('submit', async (event) => 
     button.disabled = !gptReady;
   }
 });
+
+document.querySelector('#chat-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('button');
+  const answer = document.querySelector('#chat-answer');
+  const status = document.querySelector('#chat-status');
+  button.disabled = true;
+  answer.textContent = '';
+  status.textContent = '开发板正在读取问题…';
+  const start = performance.now();
+  let first, done = false;
+  try {
+    const result = await fetch('/api/chat', {method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({question: form.elements.question.value})});
+    if (!result.ok) throw new Error((await result.json()).error);
+    const reader = result.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buffer = '';
+    while (!done) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      const lines = (buffer + chunk.value).split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        const frame = JSON.parse(line);
+        if (frame.error) throw new Error(frame.error);
+        if (frame.text) {
+          if (first === undefined) first = (performance.now() - start) / 1000;
+          answer.textContent += frame.text;
+          status.textContent = '正在回答…';
+        }
+        if (frame.done) {
+          done = true;
+          status.textContent = (frame.limited ? '达到回答长度上限' : '回答完成') +
+            ` · 首字 ${(first ?? 0).toFixed(1)} 秒 · ${frame.timings.predicted_per_second.toFixed(2)} token/秒`;
+        }
+      }
+    }
+    if (!done) throw new Error('回答中断，请重新提问');
+  } catch (error) {
+    status.textContent = error.message || '未收到板端回答';
+  } finally {
+    button.disabled = false;
+  }
+});

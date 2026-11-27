@@ -11,9 +11,10 @@ import bottle
 
 if __package__:
     from .panel import Panel
-    from . import firmware, gpt
+    from . import chat, firmware, gpt
 else:
     from panel import Panel
+    import chat
     import firmware
     import gpt
 
@@ -37,6 +38,7 @@ def create_server(host, port, fifo):
 
 def create_app(command_fifo):
     app = bottle.Bottle()
+    chat.register(app)
     gpt.register(app, os.path.dirname(command_fifo))
     panel = Panel(os.path.dirname(command_fifo))
 

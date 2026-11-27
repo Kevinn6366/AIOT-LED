@@ -21,3 +21,4 @@ __pycache__/
 !/build/artifacts/gpt.elf
 !/build/artifacts/gpt-overlay.dtbo
 vivado_pid*.str
+!/build/artifacts/llama-server.elf

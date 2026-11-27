@@ -13,3 +13,5 @@
 四路普通灯和拨杆映射为 `/dev/uio0`（0x41200000），两盏 RGB 彩灯的六路 PWM 映射为 `/dev/uio1`（0x41210000）。两部分均使用 Vivado Block Design 接线。按键尚待实现。接口与数据方向见 [PL 灯光控制](panel.md)。
 
 ZyboGPT 扩展在同一 Block Design 中增加独立 AXI-Lite 从设备（0x43C00000）。本机网页发送提示词，板端 Bottle 通过 FIFO 交给 SDK C 程序；程序经 UIO 启动推理核并读取字符与周期计数。详见 [ZyboGPT 英文续写](zybogpt.md)。
+
+中文问答经本机网页、板端 Bottle 和回环 HTTP 接口进入 PS 上的 Qwen2.5-0.5B-Instruct。ARM 程序从 SD 卡映射量化权重，逐段向网页返回文字。详见[板端中文问答](qwen.md)。

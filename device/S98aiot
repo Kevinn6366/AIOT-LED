@@ -48,6 +48,12 @@ for attempt in 1 2 3 4 5; do
             ln -s "/dev/${1##*/}" "$dir/gpt-uio"
             chmod +x build/artifacts/gpt.elf
         fi
+        model=/run/media/mmcblk0p1/qwen/qwen.gguf
+        if [ -s "$model" ]; then
+            chmod +x build/artifacts/llama-server.elf
+            build/artifacts/llama-server.elf -m "$model" -t 2 -c 512 -b 32 -ub 32 \
+                --parallel 1 --threads-http 2 --host 127.0.0.1 --port 8091 >qwen.log 2>&1 </dev/null &
+        fi
         echo ready >boot-stage
         echo "[AIOT] ready http://169.254.155.221:8080/" >/dev/console
         exit 0
