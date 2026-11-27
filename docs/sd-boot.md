@@ -4,7 +4,9 @@
 
 SD 卡留在 ZYBO Z7-20，选择 SD 启动，网线接实验电脑。板端每次启动配置 `169.254.155.221/16`，通过 Linux FPGA Manager 加载六路 PWM 位流，绑定两个 UIO 外设并启动 PS、PL 控制程序和 Bottle 服务。COM3 用于观察引导，服务自启无需电脑发送串口指令。
 
-在电脑上运行 `host/open-monitor.ps1` 打开 [启动监视页](http://127.0.0.1:8089/)。监视程序只读 COM3，波特率 115200。需要同时观察 U-Boot 和 Linux 启动消息时，在上电前打开该页。电脑首次运行需执行 `python -m pip install --target build/host-python pyserial==3.5`。板端上线后，可以在[灯控页面](http://169.254.155.221:8080/)的「系统与固件」查看运行时间、内核、SD 卡、UIO 和 PS/PL 进程状态。
+电脑运行 `host/open-monitor.ps1` 后，Edge 打开 [本机灯控台](http://127.0.0.1:8089/)。页面、脚本和样式均由电脑从项目目录提供。电脑服务通过网线向板端接口发送数字灯、RGB 开关和颜色指令，并转发签名固件。板端断电时本机页面仍可访问，硬件状态显示离线。
+
+[启动监视页](http://127.0.0.1:8089/boot) 只读 COM3，波特率 115200。需要观察完整启动过程时，在开发板上电前启动电脑服务。电脑首次运行需执行 `python -m pip install --target build/host-python pyserial==3.5`。板端上线后，本机灯控台的「系统与固件」显示运行时间、内核、SD 卡、UIO 和 PS/PL 进程状态。
 
 ## 使用网页更新
 
@@ -12,7 +14,13 @@ SD 卡留在 ZYBO Z7-20，选择 SD 启动，网线接实验电脑。板端每�
 
 卡根目录中的 `aiot-a.ub` 与 `aiot-b.ub` 是项目启动槽。原始 `BOOT.BIN`、`image.ub` 保留，另有 `aiot-original/` 备份。板端不响应时，可在读卡器中将卡根的 `uEnv.txt` 改名为 `uEnv.disabled`，下次上电恢复原实验系统。已通过 FIT 校验但无法启动应用的版本需要人工回退。
 
+## 断电验收
+
+2026-11-27，A 槽首次重启后，签名包通过以太网写入 B 槽并通过 SHA-256 回读。用户关闭再打开电源，电脑监视器观察到新的 U-Boot 与灯控就绪消息。网页报告新的 Linux 启动 ID，SD 已挂载、UIO 已绑定，PS 和 PL 进程均就绪。测试期间没有在串口执行 IP 配置、UIO 绑定或启动服务命令。
+
 ## 构建
+
+本机控制台另经现场验收：通过 `127.0.0.1:8089` 设置 LD5 红、LD6 蓝并开启，用户确认两灯颜色正确。开发板再次上电后回到默认关灯状态。修改签名的固件经本机入口上传后收到 HTTP 400，SD 启动槽保持 B。
 
 1. 在 Vivado 和 Xilinx SDK 中生成 [PL 位流和 ARM 程序](panel.md)。从 `build/artifacts/` 执行 `bootgen -arch zynq -image ../../hardware/network.bif -process_bitstream bin -w`。
 2. 在项目根目录按[运行包说明](ld4.md)生成 `build/board.tgz`。Windows Python 需安装 `cryptography`。执行 `python device/sign-sd.py prepare` 生成或复用本机配对私钥。

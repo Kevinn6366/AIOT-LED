@@ -1,4 +1,5 @@
 const rows = document.querySelector('#channels');
+document.querySelector('#host-tools').hidden = !['127.0.0.1', 'localhost'].includes(location.hostname);
 const link = document.querySelector('#link');
 const clock = document.querySelector('#clock');
 const errorLine = document.querySelector('#error');
