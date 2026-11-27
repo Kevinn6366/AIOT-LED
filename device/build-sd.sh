@@ -7,6 +7,10 @@ export PATH="$native:$PATH"
 out=$(pwd)/build/sd
 tree=$out/overlay
 mkdir -p "$tree/etc/rc5.d" "$tree/lib/firmware" "$tree/opt/aiot"
+if grep -q "$(printf '\r')" device/S98aiot; then
+    echo "S98aiot must use Unix line endings" >&2
+    exit 1
+fi
 cp device/S98aiot "$tree/etc/rc5.d/S98aiot"
 chmod 755 "$tree/etc/rc5.d/S98aiot"
 cp build/board.tgz "$tree/opt/aiot/"

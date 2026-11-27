@@ -9,6 +9,9 @@ echo "[AIOT] PetaLinux started" > /dev/console
 exec >>boot.log 2>&1
 ip link set eth0 up
 ip addr show eth0 | grep -q '169\.254\.155\.221/16 ' || ip addr add 169.254.155.221/16 dev eth0
+if [ -f /run/media/mmcblk0p1/uEnv.txt ]; then
+    cp /run/media/mmcblk0p1/uEnv.txt startup-env
+fi
 tar xzf /opt/aiot/board.tgz
 chmod +x build/python-arm build/led-control build/artifacts/panel-io.elf
 export PYTHONHOME="$dir" LD_LIBRARY_PATH="$dir/lib" PYTHONPATH="$dir/build/python"

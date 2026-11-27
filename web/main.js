@@ -127,14 +127,42 @@ psButtons.forEach((button) => button.addEventListener('click', async () => {
 }));
 update();
 
+const restart = document.querySelector('#restart');
+const restartResult = document.querySelector('#restart-result');
+document.querySelector('#restart-tools').hidden = document.querySelector('#host-tools').hidden;
+let bootId = '';
+let restarting = '';
+restart.addEventListener('click', async () => {
+  if (!bootId || !window.confirm('重启开发板并从 SD 卡启动？')) return;
+  restarting = bootId;
+  restart.disabled = true;
+  restartResult.textContent = '等待开发板重新启动…';
+  try {
+    const response = await fetch('/api/reboot', {method: 'POST',
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify({boot_id: bootId})});
+    if (!response.ok) throw new Error();
+  } catch {
+    restarting = '';
+    restartResult.textContent = '未收到重启回执，请核对启动状态。';
+  }
+});
+
 async function pollBoot() {
   const box = document.querySelector('#boot-status');
   try {
     const response = await fetch('/api/system', {cache: 'no-store'});
     if (!response.ok) throw new Error();
     const s = await response.json();
+    bootId = s.boot_id;
+    const ready = s.stage === 'ready' && s.ps && s.pl && s.uio && s.card;
+    if (restarting && bootId !== restarting && ready) {
+      restarting = '';
+      restartResult.textContent = '已从 SD 卡重新启动，灯控已恢复。';
+    }
+    restart.disabled = !ready || Boolean(restarting);
     box.textContent = `PetaLinux ${s.kernel} 已启动 · ${s.uptime} 秒 · SD ${s.card ? '已挂载' : '未挂载'} · UIO ${s.uio ? '已绑定' : '待绑定'} · 灯控 ${s.ps && s.pl ? '已运行' : '待就绪'} · ${s.version}`;
   } catch {
+    restart.disabled = true;
     box.textContent = '未收到开发板响应，启动状态未知。';
   } finally {
     setTimeout(pollBoot, 3000);

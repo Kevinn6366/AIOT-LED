@@ -3,6 +3,7 @@
 import hashlib
 import os
 import shutil
+import subprocess
 import struct
 import tempfile
 import threading
@@ -40,6 +41,37 @@ def system_state():
                 card=os.path.ismount(CARD))
 
 
+def verify_signature(signature, digest):
+    # Strict RSA-2048 / PKCS#1 v1.5 SHA-256, using the paired public modulus.
+    modulus = int(read_text('/etc/aiot-public.hex'), 16)
+    value = int.from_bytes(signature, 'big')
+    prefix = bytes.fromhex('3031300d060960864801650304020105000420')
+    tail = prefix + digest
+    expected = b'\x00\x01' + b'\xff' * (253 - len(tail)) + b'\x00' + tail
+    if value >= modulus or pow(value, 65537, modulus).to_bytes(256, 'big') != expected:
+        raise ValueError('签名不匹配')
+
+
+def restart(signature):
+    boot_id = read_text('/proc/sys/kernel/random/boot_id')
+    digest = hashlib.sha256(('AIOT-REBOOT1/' + boot_id).encode('ascii')).digest()
+    verify_signature(signature, digest)
+    if not UPDATE_LOCK.acquire(False):
+        raise ValueError('写卡或重启正在进行')
+
+    def reboot():
+        try:
+            os.sync()
+            subprocess.check_call(['/sbin/reboot'])
+        except OSError:
+            UPDATE_LOCK.release()
+        except subprocess.CalledProcessError:
+            UPDATE_LOCK.release()
+
+    threading.Timer(1, reboot).start()
+    return dict(boot_id=boot_id)
+
+
 def install(stream, length):
     if not 268 < length <= LIMIT or stream.read(8) != MAGIC:
         raise ValueError('无效的固件包')
@@ -65,15 +97,11 @@ def install(stream, length):
         magic, size = struct.unpack('>II', image.read(8))
         if magic != 0xd00dfeed or size != length - 264:
             raise ValueError('FIT 长度或标识不正确')
-        # Strict RSA-2048 / PKCS#1 v1.5 SHA-256, using the paired public modulus.
-        modulus = int(read_text('/etc/aiot-public.hex'), 16)
-        value = int.from_bytes(signature, 'big')
-        prefix = bytes.fromhex('3031300d060960864801650304020105000420')
-        tail = prefix + digest.digest()
-        expected = b'\x00\x01' + b'\xff' * (253 - len(tail)) + b'\x00' + tail
-        if value >= modulus or pow(value, 65537, modulus).to_bytes(256, 'big') != expected:
-            raise ValueError('固件签名不匹配')
-        target = 'b' if slots[existing] == 'a' else 'a'
+        verify_signature(signature, digest.digest())
+        active = slots.get(read_text('/tmp/aiot-led/startup-env'))
+        if active is None:
+            raise ValueError('无法确认本次启动槽')
+        target = 'b' if active == 'a' else 'a'
         image.seek(0)
         path = CARD + '/aiot-' + target + '.ub'
         with open(path + '.new', 'wb') as out:

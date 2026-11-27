@@ -40,12 +40,13 @@ class LedTest(unittest.TestCase):
             for path in ('/', '/main.js'):
                 with urllib.request.urlopen(url + path, timeout=3) as result:
                     self.assertEqual(result.status, 200)
+                    self.assertTrue(result.read())
             for payload, status in (({'on': 1}, 400), ({'on': True}, 503)):
                 with self.assertRaises(urllib.error.HTTPError) as caught:
                     post(payload)
                 self.assertEqual(caught.exception.code, status)
 
-            worker = subprocess.Popen(['build/test/led-control', fifo, value])
+            worker = subprocess.Popen(['build/test/led-control', str(fifo), str(value)])
             try:
                 for on in (True, False):
                     for _ in range(100):

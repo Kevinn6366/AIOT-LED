@@ -35,6 +35,7 @@
     <section aria-labelledby="boot-title">
       <div class="section-head"><h2 id="boot-title">系统与固件</h2><code>SD / PetaLinux</code></div>
       <p class="note" id="boot-status">正在读取启动状态…</p>
+      <div class="ps" id="restart-tools" hidden><button type="button" id="restart" disabled>重启开发板</button><span id="restart-result" role="status"></span></div>
       <form id="firmware-form" class="ps">
         <input aria-label="签名固件包" type="file" accept=".aiot" required>
         <button>写入 SD 卡</button>

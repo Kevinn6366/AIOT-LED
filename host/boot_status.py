@@ -75,12 +75,37 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             conn.close()
 
+    def restart_board(self, size):
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import padding
+
+        try:
+            boot_id = json.loads(self.rfile.read(size))['boot_id']
+            if not isinstance(boot_id, str) or not re.fullmatch('[0-9a-f-]{36}', boot_id):
+                raise ValueError()
+        except (ValueError, TypeError, KeyError):
+            return self.send_error(400)
+        conn = http.client.HTTPConnection('169.254.155.221', 8080, timeout=4)
+        try:
+            path = ASSETS.parent / 'build/sd/signing-key.pem'
+            key = serialization.load_pem_private_key(path.read_bytes(), password=None)
+            signature = key.sign(('AIOT-REBOOT1/' + boot_id).encode('ascii'),
+                                 padding.PKCS1v15(), hashes.SHA256())
+            conn.request('POST', '/api/reboot', signature,
+                         {'Content-Type': 'application/octet-stream'})
+            response = conn.getresponse()
+            self.reply(response.status, response.read(), 'application/json')
+        except (OSError, ValueError, http.client.HTTPException):
+            self.send_error(503)
+        finally:
+            conn.close()
+
     def do_POST(self):
         host = self.headers.get('Host', '')
         if host not in LOCAL_HOSTS or self.headers.get('Origin') != 'http://' + host:
             return self.send_error(403)
         path = urlsplit(self.path).path
-        if not re.fullmatch(r'/api/(led|panel/[0-3]|rgb/[56]|firmware)', path):
+        if not re.fullmatch(r'/api/(led|panel/[0-3]|rgb/[56]|firmware|reboot)', path):
             return self.send_error(404)
         firmware = path == '/api/firmware'
         if self.headers.get_content_type() != ('application/octet-stream' if firmware else 'application/json'):
@@ -91,6 +116,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_error(400)
         if not 0 < size <= (80 * 1024 * 1024 if firmware else 4096):
             return self.send_error(413)
+        if path == '/api/reboot':
+            return self.restart_board(size)
         self.board_request(path, size)
 
     def do_GET(self):

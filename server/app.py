@@ -43,6 +43,17 @@ def create_app(command_fifo):
         bottle.response.set_header('Cache-Control', 'no-store')
         return firmware.system_state()
 
+    @app.post('/api/reboot')
+    def reboot():
+        if bottle.request.content_length != 256:
+            bottle.response.status = 400
+            return {'error': '需要本机签名'}
+        try:
+            return firmware.restart(bottle.request.environ['wsgi.input'].read(256))
+        except ValueError as error:
+            bottle.response.status = 403
+            return {'error': str(error)}
+
     @app.post('/api/firmware')
     def update_firmware():
         size = bottle.request.content_length
