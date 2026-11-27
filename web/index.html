@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ZYBO Z7-20 · 灯光控制</title>
-  <link rel="stylesheet" href="/panel.css">
-  <script src="/main.js" defer></script>
+  <link rel="stylesheet" href="/panel.css?v=rgb1">
+  <script src="/main.js?v=rgb1" defer></script>
 </head>
 <body>
   <header><div class="bar"><strong>AIOT-LED</strong><span>设备控制台</span><code>ZYBO Z7-20</code></div></header>
@@ -18,6 +18,13 @@
         <tbody id="channels"></tbody>
       </table></div>
       <p class="note">选择「跟随拨杆」时，1 为亮、0 为灭。选择「开灯」或「关灯」可单独接管该路。</p>
+    </section>
+    <section aria-labelledby="rgb-title">
+      <div class="section-head"><h2 id="rgb-title">RGB 彩灯</h2><code>PL / PWM</code></div>
+      <div class="scroll"><table>
+        <thead><tr><th scope="col">通道</th><th scope="col">设定颜色</th><th scope="col">使能状态</th><th scope="col">操作</th></tr></thead>
+        <tbody id="rgb-channels"></tbody>
+      </table></div>
     </section>
     <section aria-labelledby="ps-title">
       <div class="section-head"><h2 id="ps-title">PS 指示灯</h2><code>MIO7</code></div>

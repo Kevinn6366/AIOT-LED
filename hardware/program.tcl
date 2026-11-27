@@ -11,4 +11,5 @@ current_hw_device $dev
 set_property PROGRAM.FILE $bit $dev
 program_hw_devices $dev
 refresh_hw_device $dev
+close_hw_target
 puts PANEL_JTAG_PROGRAMMED

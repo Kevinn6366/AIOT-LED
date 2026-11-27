@@ -11,6 +11,7 @@ vivado*.log
 /build/artifacts/*
 !/build/artifacts/panel_io_wrapper.bit
 !/build/artifacts/panel.hdf
+!/build/artifacts/rgb-overlay.dtbo
 !/build/artifacts/panel-io.elf
 !/build/artifacts/led-control.elf
 __pycache__/

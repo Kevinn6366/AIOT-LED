@@ -1,0 +1,17 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+    fragment@0 {
+        target-path = "/amba_pl";
+        __overlay__ {
+            #address-cells = <1>;
+            #size-cells = <1>;
+            rgb@41210000 {
+                compatible = "aiot-led,rgb-pwm";
+                reg = <0x41210000 0x1000>;
+                status = "okay";
+            };
+        };
+    };
+};

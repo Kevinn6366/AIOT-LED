@@ -22,6 +22,21 @@ for (let i = 0; i < 4; i++) {
   }
 }
 
+const rgbRows = document.querySelector('#rgb-channels');
+for (const lamp of [5, 6]) {
+  const row = rgbRows.insertRow();
+  row.innerHTML = `<th scope="row">LD${lamp}</th>
+      <td><label class="rgb-color"><input type="color" aria-label="LD${lamp} 颜色" disabled><code>—</code></label></td>
+      <td><span class="lamp">未知</span></td>
+      <td><div class="group"><button data-on="1" disabled>开灯</button><button data-on="0" disabled>关灯</button></div></td>`;
+  const picker = row.querySelector('input');
+  picker.addEventListener('change', () => update(lamp, {color: picker.value}));
+  row.querySelectorAll('button').forEach((button) => {
+    button.setAttribute('aria-label', `LD${lamp} ${button.textContent}`);
+    button.addEventListener('click', () => update(lamp, {on: button.dataset.on === '1'}));
+  });
+}
+
 function render(sample) {
   link.textContent = sample ? 'PL 在线' : 'PL 离线';
   link.classList.toggle('live', Boolean(sample));
@@ -39,6 +54,25 @@ function render(sample) {
       button.setAttribute('aria-pressed', String(button.dataset.mode === selected));
     });
   });
+  Array.from(rgbRows.rows).forEach((row, i) => {
+    const state = sample && sample.rgb && sample.rgb[i];
+    const picker = row.querySelector('input');
+    picker.disabled = !state;
+    if (state && picker.dataset.confirmed !== state.color) {
+      picker.value = state.color;
+      picker.dataset.confirmed = state.color;
+    } else if (!state) {
+      delete picker.dataset.confirmed;
+    }
+    row.querySelector('code').textContent = state ? state.color.toUpperCase() : '—';
+    const lamp = row.querySelector('.lamp');
+    lamp.textContent = state ? (state.on ? '开启' : '关闭') : '未知';
+    lamp.classList.toggle('on', Boolean(state && state.on));
+    row.querySelectorAll('button').forEach((button) => {
+      button.disabled = !state;
+      button.setAttribute('aria-pressed', String(Boolean(state && state.on === (button.dataset.on === '1'))));
+    });
+  });
 }
 
 async function update(channel, mode) {
@@ -48,15 +82,21 @@ async function update(channel, mode) {
   const writing = channel !== undefined;
   if (writing) {
     pending = true;
-    rows.querySelectorAll('button').forEach((button) => { button.disabled = true; });
+    document.querySelectorAll('#channels button, #rgb-channels button, #rgb-channels input')
+        .forEach((control) => { control.disabled = true; });
   }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3500);
   try {
     const options = {cache: 'no-store', signal: controller.signal};
-    if (writing) Object.assign(options, {method: 'POST',
-      headers: {'Content-Type': 'application/json'}, body: JSON.stringify({mode})});
-    const response = await fetch(writing ? '/api/panel/' + channel : '/api/panel', options);
+    let url = '/api/panel';
+    if (writing) {
+      const rgb = channel === 5 || channel === 6;
+      url = (rgb ? '/api/rgb/' : '/api/panel/') + channel;
+      Object.assign(options, {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(rgb ? mode : {mode})});
+    }
+    const response = await fetch(url, options);
     if (!response.ok) throw new Error();
     const data = await response.json();
     if (requestId === generation) { render(data); errorLine.textContent = ''; }

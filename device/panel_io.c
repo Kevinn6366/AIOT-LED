@@ -17,8 +17,8 @@ static int prepare_fifo(const char *path) {
 }
 
 int main(int argc, char **argv) {
-    if (argc != 4) {
-        fprintf(stderr, "Usage: %s UIO COMMAND_FIFO STATUS_FIFO\n", argv[0]);
+    if (argc != 5) {
+        fprintf(stderr, "Usage: %s UIO COMMAND_FIFO STATUS_FIFO RGB_UIO\n", argv[0]);
         return EXIT_FAILURE;
     }
     int uio = open(argv[1], O_RDWR | O_SYNC);
@@ -26,10 +26,19 @@ int main(int argc, char **argv) {
     volatile uint32_t *regs = mmap(NULL, 4096, PROT_READ | PROT_WRITE,
                                    MAP_SHARED, uio, 0);
     if (regs == MAP_FAILED) { perror("mmap"); return EXIT_FAILURE; }
-    if ((regs[2] >> 8) != 4282959u) {
+    if ((regs[2] >> 14) != 21063u) {
         fprintf(stderr, "Unexpected PL design ID\n");
         return EXIT_FAILURE;
     }
+    int rgb_fd = open(argv[4], O_RDWR | O_SYNC);
+    if (rgb_fd < 0) { perror("RGB UIO"); return EXIT_FAILURE; }
+    volatile uint32_t *rgb = mmap(NULL, 4096, PROT_READ | PROT_WRITE,
+                                  MAP_SHARED, rgb_fd, 0);
+    if (rgb == MAP_FAILED) { perror("RGB mmap"); return EXIT_FAILURE; }
+    uint32_t colors[2] = {0xffffff, 0xffffff};
+    unsigned power = 0;
+    rgb[0] = 0;
+    rgb[2] = 0;
     if (prepare_fifo(argv[2]) || prepare_fifo(argv[3])) {
         fprintf(stderr, "Cannot prepare panel FIFOs\n");
         return EXIT_FAILURE;
@@ -55,6 +64,14 @@ int main(int argc, char **argv) {
                 else control &= ~bit;
             }
             regs[0] = control;
+        } else if ((channel == 5 || channel == 6) &&
+                   (mode == -3 || mode == -2 || (mode >= 0 && mode <= 0xffffff))) {
+            unsigned lamp = (unsigned)(channel - 5);
+            unsigned bit = 1u << lamp;
+            if (mode == -3) power |= bit;
+            else if (mode == -2) power &= ~bit;
+            else colors[lamp] = (uint32_t)mode;
+            rgb[2 * lamp] = (power & bit) ? colors[lamp] : 0;
         } else if (channel != -1 || mode != -1) {
             continue;
         }
@@ -62,8 +79,9 @@ int main(int argc, char **argv) {
         int out = open(argv[3], O_WRONLY | O_NONBLOCK | O_NOFOLLOW);
         if (out >= 0) {
             char reply[96];
-            int n = snprintf(reply, sizeof(reply), "%s %u %u %u\n", token,
-                             inputs & 15u, (inputs >> 4) & 15u, (control >> 4) & 15u);
+            int n = snprintf(reply, sizeof(reply), "%s %u %u %u %u %u %u\n", token,
+                             inputs & 15u, (inputs >> 4) & 15u, (control >> 4) & 15u,
+                             colors[0], colors[1], power);
             if (write(out, reply, (size_t)n) < 0 && errno != EPIPE) perror("reply");
             close(out);
         }

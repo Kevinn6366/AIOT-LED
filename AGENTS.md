@@ -3,7 +3,7 @@
 ## 开发范围
 
 - 所有开发、仿真、构建和实验记录均在本仓库目录内进行。本机路径为 `D:\嵌入式lab\AIOT-LED`。
-- Vivado 工程和 Block Design 放在 `build/vivado/`，日志放在 `build/`，可交付的 BIT、HDF 和 ARM ELF 放在 `build/artifacts/`，与本次迭代源码一起提交。为适配旧版工具，本机 `R:\` 映射到仓库根目录。
+- 当前 Vivado 工程和 Block Design 放在 `build/rgb-vivado/`，日志放在 `build/`，BIT、HDF、DTBO 和 ARM ELF 放在 `build/artifacts/`，与本次迭代源码一起提交。本机 `R:\` 映射到仓库根目录。
 - 开发板为 ZYBO Z7-20（zybo-z720）。PL 逻辑在 Vivado 图形界面中画图搭建，由 Vivado 生成 HDL 并烧录。PS 端 C 程序使用 Xilinx SDK 的 Linux 应用目标编译。架构以 [architecture.md](docs/architecture.md) 为准。
 - 实验按用户提供的报告顺序执行。缺少报告或关键要求不清时，先确认再开展对应实验。
 - 保留报告原有结构和格式，在对应步骤填写文字和真实截图。如实标注未完成、未验证的内容。沟通和实验记录使用简洁中文。

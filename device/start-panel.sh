@@ -17,4 +17,18 @@ set -- "$dev"/uio/uio*
 test "$#" -eq 1 && test -d "$1"
 uio=${1##*/}
 test "$(cat "/sys/class/uio/$uio/maps/map0/addr")" = 0x41200000
-exec build/artifacts/panel-io.elf "/dev/$uio" "$dir/pl-commands" "$dir/pl-status"
+overlay=/sys/kernel/config/device-tree/overlays/aiot-rgb
+rgb=/sys/bus/platform/devices/41210000.rgb
+if [ ! -d "$rgb" ]; then
+    mkdir -p "$overlay"
+    cat build/artifacts/rgb-overlay.dtbo > "$overlay/dtbo"
+fi
+if [ ! -d "$rgb/uio" ]; then
+    echo uio_pdrv_genirq > "$rgb/driver_override"
+    echo 41210000.rgb > /sys/bus/platform/drivers/uio_pdrv_genirq/bind
+fi
+set -- "$rgb"/uio/uio*
+test "$#" -eq 1 && test -d "$1"
+rgb_uio=${1##*/}
+test "$(cat "/sys/class/uio/$rgb_uio/maps/map0/addr")" = 0x41210000
+exec build/artifacts/panel-io.elf "/dev/$uio" "$dir/pl-commands" "$dir/pl-status" "/dev/$rgb_uio"

@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import re
 import socketserver
 import stat
 from wsgiref.simple_server import make_server, WSGIRequestHandler, WSGIServer
@@ -56,6 +57,19 @@ def create_app(command_fifo):
             bottle.response.status = 400
             return {'error': '无效的通道或操作'}
         return read_panel(channel, modes[mode])
+
+    @app.post('/api/rgb/<lamp:int>')
+    def rgb_command(lamp):
+        data = bottle.request.json
+        if lamp in (5, 6) and isinstance(data, dict):
+            if set(data) == {'on'} and type(data['on']) is bool:
+                return read_panel(lamp, -3 if data['on'] else -2)
+            color = data.get('color')
+            if set(data) == {'color'} and isinstance(color, str) and re.fullmatch(
+                    r'#[0-9A-Fa-f]{6}', color):
+                return read_panel(lamp, int(color[1:], 16))
+        bottle.response.status = 400
+        return {'error': '请指定 LD5 或 LD6，并提交开关值或六位 RGB 色值'}
 
     @app.get('/panel.css')
     def stylesheet():

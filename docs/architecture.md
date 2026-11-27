@@ -10,4 +10,4 @@
 | Linux 与 PL | C 程序通过 Linux UIO 访问 PL 外设。图中列出 `/dev/uio0`、`/dev/uio1`。`myip.v` 对接普通 LED、按键和拨码开关，`mypwm.v` 驱动 RGB LED。 |
 | Linux 与 PS | 图中 PS 侧 LED 通过 `/sys/class/gpio` 控制。 |
 
-本次四路普通灯使用 Vivado Block Design 实现图中数字 I/O 的拨杆与灯功能，实板映射为 `/dev/uio0`，地址为 `0x41200000`。按键和 RGB PWM 留待后续迭代。接口与数据方向见[四路 PL 控制](panel.md)。
+四路普通灯和拨杆映射为 `/dev/uio0`（0x41200000），两盏 RGB 彩灯的六路 PWM 映射为 `/dev/uio1`（0x41210000）。两部分均使用 Vivado Block Design 接线。按键尚待实现。接口与数据方向见 [PL 灯光控制](panel.md)。

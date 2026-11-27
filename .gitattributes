@@ -2,3 +2,4 @@
 *.elf binary
 *.bit binary
 *.hdf binary
+*.dtbo binary

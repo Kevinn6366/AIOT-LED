@@ -1,6 +1,6 @@
 # Source inside Vivado 2019.1 GUI, from the project repository.
 set root [file normalize [file join [file dirname [info script]] ..]]
-create_project panel $root/build/vivado -part xc7z020clg400-1
+create_project panel $root/build/rgb-vivado -part xc7z020clg400-1
 set_property board_part [lindex [get_board_parts digilentinc.com:zybo-z7-20:part0:*] end] [current_project]
 create_bd_design panel_io
 proc ip {name kind config} {
@@ -29,11 +29,40 @@ wire difference/Res enabled/Op1
 wire mask/Dout enabled/Op2
 wire enabled/Res output_value/Op2
 connect_bd_net [get_bd_ports led] [get_bd_pins output_value/Res]
-ip identity xlconstant {CONFIG.CONST_WIDTH 24 CONFIG.CONST_VAL 4282959}
-ip feedback xlconcat {CONFIG.NUM_PORTS 3 CONFIG.IN0_WIDTH 4 CONFIG.IN1_WIDTH 4 CONFIG.IN2_WIDTH 24}
+ip rgb axi_gpio {CONFIG.C_IS_DUAL 1 CONFIG.C_GPIO_WIDTH 24 CONFIG.C_ALL_OUTPUTS 1 CONFIG.C_GPIO2_WIDTH 24 CONFIG.C_ALL_OUTPUTS_2 1}
+apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config {Master "/ps/M_AXI_GP0" Slave "/rgb/S_AXI" Clk_master "Auto" Clk_slave "Auto" Clk_xbar "Auto"} [get_bd_intf_pins rgb/S_AXI]
+set rgbseg [get_bd_addr_segs -of_objects [get_bd_addr_spaces ps/Data] -filter {NAME =~ *rgb*}]
+set_property offset 0x41210000 $rgbseg
+# FCLK / 65536 gives a common PWM period. Limit peak duty to 255/512.
+ip counter c_counter_binary {CONFIG.Output_Width 16 CONFIG.CE false}
+wire ps/FCLK_CLK0 counter/CLK
+ip phase xlslice {CONFIG.DIN_WIDTH 16 CONFIG.DIN_FROM 15 CONFIG.DIN_TO 7 CONFIG.DOUT_WIDTH 9}
+wire counter/Q phase/Din
+ip pwm_sample xlconcat {CONFIG.NUM_PORTS 6}
+proc connect_rgb_lamp {lamp output_pin index} {
+    foreach {color low} {r 16 g 8 b 0} {
+        set n ld${lamp}_${color}
+        ip ${n}_level xlslice [list CONFIG.DIN_WIDTH 24 CONFIG.DIN_FROM [expr {$low+7}] CONFIG.DIN_TO $low CONFIG.DOUT_WIDTH 8]
+        wire rgb/$output_pin ${n}_level/Din
+        ip ${n}_compare c_addsub {CONFIG.Add_Mode Subtract CONFIG.A_Type Unsigned CONFIG.B_Type Unsigned CONFIG.A_Width 9 CONFIG.B_Width 8 CONFIG.Out_Width 10 CONFIG.Latency 1 CONFIG.CE false}
+        wire ps/FCLK_CLK0 ${n}_compare/CLK
+        wire phase/Dout ${n}_compare/A
+        wire ${n}_level/Dout ${n}_compare/B
+        ip ${n}_pulse xlslice {CONFIG.DIN_WIDTH 10 CONFIG.DIN_FROM 9 CONFIG.DIN_TO 9 CONFIG.DOUT_WIDTH 1}
+        wire ${n}_compare/S ${n}_pulse/Din
+        create_bd_port -dir O $n
+        connect_bd_net [get_bd_pins ${n}_pulse/Dout] [get_bd_ports $n] [get_bd_pins pwm_sample/In$index]
+        incr index
+    }
+}
+connect_rgb_lamp 5 gpio_io_o 0
+connect_rgb_lamp 6 gpio2_io_o 3
+ip identity xlconstant {CONFIG.CONST_WIDTH 18 CONFIG.CONST_VAL 21063}
+ip feedback xlconcat {CONFIG.NUM_PORTS 4 CONFIG.IN0_WIDTH 4 CONFIG.IN1_WIDTH 4 CONFIG.IN2_WIDTH 6 CONFIG.IN3_WIDTH 18}
 connect_bd_net [get_bd_ports sw] [get_bd_pins feedback/In0]
 wire output_value/Res feedback/In1
-wire identity/dout feedback/In2
+wire pwm_sample/dout feedback/In2
+wire identity/dout feedback/In3
 wire feedback/dout control/gpio2_io_i
 regenerate_bd_layout
 validate_bd_design
