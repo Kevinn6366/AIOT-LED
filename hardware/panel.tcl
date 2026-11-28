@@ -4,7 +4,7 @@ set project_dir $root/build/rgb-vivado
 if {[info exists ::env(AIOT_GPT_RTL)]} {
     set project_dir $root/build/gpt-panel
 }
-if {[info exists ::env(AIOT_QWEN_IP)]} {set project_dir $root/build/qwen-quad-panel}
+if {[info exists ::env(AIOT_QWEN_IP)]} {set project_dir $root/build/qwen-stream-panel}
 create_project panel $project_dir -part xc7z020clg400-1
 set_property board_part [lindex [get_board_parts digilentinc.com:zybo-z7-20:part0:*] end] [current_project]
 create_bd_design panel_io
@@ -96,9 +96,34 @@ if {[info exists ::env(AIOT_QWEN_IP)]} {
     update_ip_catalog
     set_property CONFIG.PCW_USE_S_AXI_HP0 1 [get_bd_cells ps]
     create_bd_cell -type ip -vlnv xilinx.com:hls:qwen_qproj:1.0 qproj
-    apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config {Master "/ps/M_AXI_GP0" Slave "/qproj/s_axi_control" Clk_master "Auto" Clk_slave "Auto" Clk_xbar "Auto"} [get_bd_intf_pins qproj/s_axi_control]
-    set_property offset 0x43C10000 [get_bd_addr_segs -of_objects [get_bd_addr_spaces ps/Data] -filter {NAME =~ *qproj*}]
-    apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config {Master "/qproj/m_axi_hp" Slave "/ps/S_AXI_HP0" Clk_master "Auto" Clk_slave "Auto" Clk_xbar "Auto"} [get_bd_intf_pins ps/S_AXI_HP0]
+    # Leave the legacy panel, GPT, PS GP0 and telemetry on FCLK0.
+    # Only the matrix accelerator and its HP0 memory port use the faster clock.
+    ip qclk clk_wiz {CONFIG.PRIM_IN_FREQ 50.000 CONFIG.CLKOUT1_REQUESTED_OUT_FREQ 125.000 CONFIG.USE_RESET false}
+    wire ps/FCLK_CLK0 qclk/clk_in1
+    ip qreset proc_sys_reset {CONFIG.C_EXT_RESET_HIGH 0}
+    wire qclk/clk_out1 qreset/slowest_sync_clk
+    wire ps/FCLK_RESET0_N qreset/ext_reset_in
+    wire qclk/locked qreset/dcm_locked
+
+    # The existing GP0 AXI interconnect inserts the clock converter on this MI.
+    set fabric [get_bd_cells ps_axi_periph]
+    set index [get_property CONFIG.NUM_MI $fabric]
+    set mi [format M%02d $index]
+    set_property CONFIG.NUM_MI [expr {$index+1}] $fabric
+    connect_bd_intf_net [get_bd_intf_pins ps_axi_periph/${mi}_AXI] [get_bd_intf_pins qproj/s_axi_control]
+    wire qclk/clk_out1 ps_axi_periph/${mi}_ACLK
+    wire qreset/peripheral_aresetn ps_axi_periph/${mi}_ARESETN
+    ip qhp axi_protocol_converter {CONFIG.MI_PROTOCOL AXI3}
+    connect_bd_intf_net [get_bd_intf_pins qproj/m_axi_hp] [get_bd_intf_pins qhp/S_AXI]
+    connect_bd_intf_net [get_bd_intf_pins qhp/M_AXI] [get_bd_intf_pins ps/S_AXI_HP0]
+    foreach pin {qproj/ap_clk qhp/aclk ps/S_AXI_HP0_ACLK} {
+        wire qclk/clk_out1 $pin
+    }
+    foreach pin {qproj/ap_rst_n qhp/aresetn} {
+        wire qreset/peripheral_aresetn $pin
+    }
+    assign_bd_address -offset 0x43C10000 -range 64K -target_address_space [get_bd_addr_spaces ps/Data] [get_bd_addr_segs qproj/s_axi_control/Reg]
+    assign_bd_address -offset 0 -range 1G -target_address_space [get_bd_addr_spaces qproj/Data_m_axi_hp] [get_bd_addr_segs ps/S_AXI_HP0/HP0_DDR_LOWOCM]
     ip qclock c_counter_binary {CONFIG.Output_Width 32 CONFIG.CE false}
     wire ps/FCLK_CLK0 qclock/CLK
     ip qcycles axi_gpio {CONFIG.C_GPIO_WIDTH 32 CONFIG.C_ALL_INPUTS 1}
@@ -121,7 +146,7 @@ wait_on_run impl_1
 if {[get_property PROGRESS [get_runs impl_1]] ne "100%"} {error "Implementation failed"}
 set out $root/build/artifacts
 if {[info exists ::env(AIOT_GPT_RTL)]} {set out $root/build/gpt-artifacts}
-if {[info exists ::env(AIOT_QWEN_IP)]} {set out $root/build/qwen-quad-artifacts}
+if {[info exists ::env(AIOT_QWEN_IP)]} {set out $root/build/qwen-decode-artifacts}
 file mkdir $out
 set run [get_property DIRECTORY [get_runs impl_1]]
 file copy -force $run/panel_io_wrapper.bit $out/panel_io_wrapper.bit

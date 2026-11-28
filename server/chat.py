@@ -36,10 +36,12 @@ def projection_counts():
         with open('/tmp/aiot-led/qproj.stats') as stats:
             values = tuple(map(int, stats.read().split()))
             if len(values) == 36:
+                return values + (0,) * 20
+            if len(values) == 56:
                 return values
     except (ValueError, OSError):
         pass
-    return (0,) * 36
+    return (0,) * 56
 
 
 def register(app):
@@ -84,9 +86,12 @@ def register(app):
                         continue
                     item = json.loads(line[5:].decode('utf-8'))
                     if item.get('stop'):
-                        delta = [v-b for v, b in zip(projection_counts(), baseline)]
+                        final = projection_counts()
+                        delta = [v-b for v, b in zip(final, baseline)]
                         yield json.dumps(dict(done=True, backend=backend, pl_calls=delta[0],
-                                              pl_layers=delta[2:26], pl_ops=delta[26:],
+                                              pl_layers=delta[2:26], pl_ops=delta[26:36],
+                                               pl_op_cycles=delta[36:46],
+                                               pl_last_graph_cycles=final[46:] if delta[0] else [0]*10,
                                               pl_cycles=delta[1], timings=item['timings'],
                                               limited=item.get('stopped_limit', False))) + '\n'
                         return

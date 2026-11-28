@@ -29,6 +29,11 @@ def ask(page, mode, prompt):
         assert min(layers) > 0 and min(ops) > 0 and sum(ops) == final['pl_calls']
     else:
         assert sum(layers) == sum(ops) == final['pl_calls'] == final['pl_cycles'] == 0
+    if 'pl_op_cycles' in final:
+        assert len(final['pl_op_cycles']) == len(final['pl_last_graph_cycles']) == 10
+        assert sum(final['pl_op_cycles']) == final['pl_cycles']
+        assert all(0 <= last <= total for last, total in
+                   zip(final['pl_last_graph_cycles'], final['pl_op_cycles']))
     first = page.locator('#metrics div').filter(has_text='首字符').locator('dd').inner_text()
     return dict(question=prompt, answer=page.locator('#chat-log .assistant span').last.inner_text(),
                 first_s=float(first.split()[0]), **final)
@@ -36,10 +41,16 @@ def ask(page, mode, prompt):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--sample-baseline', action='store_true',
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--sample-baseline', action='store_true',
                         help='send one PL request while the board sampler is listening')
-    profile = parser.parse_args().sample_baseline
-    target = root / 'build/qwen' / ('profile-web.json' if profile else 'web-comparison.json')
+    group.add_argument('--explanation', action='store_true',
+                       help='test a longer generated answer on both backends')
+    options = parser.parse_args()
+    profile = options.sample_baseline
+    prompt = '请用两句话解释为什么红绿灯能让路口更安全。' if options.explanation else question
+    name = 'explanation-comparison.json' if options.explanation else 'web-comparison.json'
+    target = root / 'build/qwen' / ('profile-web.json' if profile else name)
     target.parent.mkdir(parents=True, exist_ok=True)
     records = []
     with sync_playwright() as playwright:
@@ -54,8 +65,11 @@ def main():
         # Touch the CPU copy of the weights once. The board has warmed the PL copy at boot.
         ask(page, 'ps', '只回答数字：一加一等于几？')
         for mode in (('pl',) if profile else ('pl', 'ps', 'pl', 'ps')):
-            result = ask(page, mode, question)
-            assert '三' in result['answer'] or '3' in result['answer'], result
+            result = ask(page, mode, prompt)
+            if options.explanation:
+                assert result['timings']['predicted_n'] >= 18, result
+            else:
+                assert '三' in result['answer'] or '3' in result['answer'], result
             records.append(result)
             target.write_text(json.dumps(dict(board=state, runs=records), ensure_ascii=False, indent=2), encoding='utf8')
             print(mode, result['answer'], result['first_s'], result['timings'], result['pl_calls'], flush=True)

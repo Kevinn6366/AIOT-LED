@@ -16,6 +16,7 @@ int aiot_use_ps;  /* Set by the single-slot scheduler before dispatching the gra
 static unsigned qcount, qnext;
 static volatile uint32_t *qmem, *qctrl, *qclock;
 static uint64_t qcalls, qcycles, qlayer[QLAYERS], qkind[QKINDS];
+static uint64_t qkind_cycles[QKINDS], qgraph_cycles[QKINDS];
 
 static uint32_t qbits(float value) {
     uint32_t bits;
@@ -61,10 +62,28 @@ static unsigned qresident(const struct ggml_tensor *w, bool wide) {
     for (unsigned i=0;i<qcount;++i)
         if (qcache[i].source == w->data) return qcache[i].offset;
     int blocks = w->ne[0]/32 * w->ne[1];
-    unsigned size = blocks*(wide ? 40u : 24u);
+    GGML_ASSERT(w->ne[0]%128==0);
+    unsigned size = blocks*(wide ? 34u : 18u);
     GGML_ASSERT(qcount < QWEIGHTS && size <= QDYNAMIC-qnext);
     unsigned offset = qnext;
-    qpack(qmem+offset/4, w->data, blocks, wide);
+    const unsigned words=wide ? 8 : 4;
+    const unsigned char *src=w->data;
+    volatile uint32_t *dest=qmem+offset/4;
+    for (int group=0;group<blocks/4;++group) {
+        uint16_t scales[4];
+        for (unsigned k=0;k<4;++k) {
+            memcpy(scales+k,src,2);
+            for (unsigned j=0;j<words;++j) {
+                uint32_t value;
+                memcpy(&value,src+2+4*j,4);
+                dest[2+k*words+j]=value;
+            }
+            src+=2+4*words;
+        }
+        dest[0]=scales[0]|((uint32_t)scales[1]<<16);
+        dest[1]=scales[2]|((uint32_t)scales[3]<<16);
+        dest+=2+4*words;
+    }
     qcache[qcount].source=w->data;
     qcache[qcount++].offset=offset;
     qnext += size;
@@ -77,11 +96,14 @@ static void qstats(void) {
     fprintf(f,"%" PRIu64 " %" PRIu64, qcalls,qcycles);
     for (int i=0;i<QLAYERS;++i) fprintf(f," %" PRIu64,qlayer[i]);
     for (int i=0;i<QKINDS;++i) fprintf(f," %" PRIu64,qkind[i]);
+    for (int i=0;i<QKINDS;++i) fprintf(f," %" PRIu64,qkind_cycles[i]);
+    for (int i=0;i<QKINDS;++i) fprintf(f," %" PRIu64,qgraph_cycles[i]);
+    memset(qgraph_cycles,0,sizeof(qgraph_cycles));
     fputc('\n',f);
     GGML_ASSERT(fclose(f)==0 && rename("/tmp/aiot-led/qproj.stats.new","/tmp/aiot-led/qproj.stats")==0);
 }
 
-static void qlaunch(unsigned offset,int width,int rows,int columns,int format) {
+static void qlaunch(unsigned offset,int width,int rows,int columns,int format,int kind) {
     qctrl[4]=(QBASE+offset)/8;
     qctrl[6]=(QBASE+QINPUT)/8;
     qctrl[8]=(QBASE+QOUTPUT)/8;
@@ -97,7 +119,10 @@ static void qlaunch(unsigned offset,int width,int rows,int columns,int format) {
         GGML_ASSERT(ggml_time_ms()<deadline);
         if (rows>512) usleep(50);
     }
-    qcycles+=(uint32_t)(qclock[0]-start);
+    uint32_t elapsed=qclock[0]-start;
+    qcycles+=elapsed;
+    qkind_cycles[kind]+=elapsed;
+    qgraph_cycles[kind]+=elapsed;
     ++qcalls;
     __sync_synchronize();
 }
@@ -146,7 +171,7 @@ static void qall_matmul(const struct ggml_tensor *w, const void *x,
                     for (int k=0;k<width;++k) qmem[QINPUT/4+j*width+k]=qbits(GGML_FP16_TO_FP32(half[k]));
                 } else qpack(qmem+QINPUT/4+j*(width/32)*10,v,width/32,true);
             }
-            qlaunch(offset,width,rows,group,fp ? 2 : wide ? 1 : 0);
+            qlaunch(offset,width,rows,group,fp ? 2 : wide ? 1 : 0,kind);
             for (int j=0;j<group;++j) {
                 float *y=(float *)((char *)out->data+h*out->nb[2]+(c+j)*out->nb[1]);
                 for (int r=0;r<rows;++r) {

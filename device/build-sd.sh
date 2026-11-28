@@ -26,7 +26,7 @@ deploy="$images/../../build/tmp/deploy/images/plnx-zynq7"
 cp "$deploy/fitImage-linux.bin-plnx-zynq7" "$out/kernel"
 cp "$images/system.dtb" "$out/system.dtb"
 if [ "${AIOT_QPROJ:-0}" = 1 ]; then
-    cmp "$AIOT_BIT_BIN" build/qwen-quad-artifacts/panel_io_wrapper.bit.bin
+    cmp "$AIOT_BIT_BIN" build/qwen-decode-artifacts/panel_io_wrapper.bit.bin
     dtc -I dtb -O dts -o "$out/qwen.dts" "$images/system.dtb"
     cat hardware/qwen/reserve.dtsi >> "$out/qwen.dts"
     dtc -I dts -O dtb -o "$out/system.dtb" "$out/qwen.dts"
