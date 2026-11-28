@@ -19,12 +19,14 @@ fi
 cp build/board.tgz "$tree/opt/aiot/"
 cp "${AIOT_BIT_BIN:-build/artifacts/panel_io_wrapper.bit.bin}" "$tree/lib/firmware/aiot-panel.bin"
 cp "$out/public.hex" "$tree/etc/aiot-public.hex"
-sha256sum build/board.tgz | cut -c 1-12 > "$tree/etc/aiot-version"
+# A hardware-only update must be distinguishable even with the same ARM ELF.
+sha256sum build/board.tgz "$tree/lib/firmware/aiot-panel.bin" | cut -d' ' -f1 |
+    sha256sum | cut -c 1-12 > "$tree/etc/aiot-version"
 deploy="$images/../../build/tmp/deploy/images/plnx-zynq7"
 cp "$deploy/fitImage-linux.bin-plnx-zynq7" "$out/kernel"
 cp "$images/system.dtb" "$out/system.dtb"
 if [ "${AIOT_QPROJ:-0}" = 1 ]; then
-    cmp "$AIOT_BIT_BIN" build/qwen-all-artifacts/panel_io_wrapper.bit.bin
+    cmp "$AIOT_BIT_BIN" build/qwen-fast-artifacts/panel_io_wrapper.bit.bin
     dtc -I dtb -O dts -o "$out/qwen.dts" "$images/system.dtb"
     cat hardware/qwen/reserve.dtsi >> "$out/qwen.dts"
     dtc -I dts -O dtb -o "$out/system.dtb" "$out/qwen.dts"

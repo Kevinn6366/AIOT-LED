@@ -4,7 +4,7 @@ set project_dir $root/build/rgb-vivado
 if {[info exists ::env(AIOT_GPT_RTL)]} {
     set project_dir $root/build/gpt-panel
 }
-if {[info exists ::env(AIOT_QWEN_IP)]} {set project_dir $root/build/qwen-all-panel}
+if {[info exists ::env(AIOT_QWEN_IP)]} {set project_dir $root/build/qwen-fast-panel}
 create_project panel $project_dir -part xc7z020clg400-1
 set_property board_part [lindex [get_board_parts digilentinc.com:zybo-z7-20:part0:*] end] [current_project]
 create_bd_design panel_io
@@ -121,7 +121,7 @@ wait_on_run impl_1
 if {[get_property PROGRESS [get_runs impl_1]] ne "100%"} {error "Implementation failed"}
 set out $root/build/artifacts
 if {[info exists ::env(AIOT_GPT_RTL)]} {set out $root/build/gpt-artifacts}
-if {[info exists ::env(AIOT_QWEN_IP)]} {set out $root/build/qwen-all-artifacts}
+if {[info exists ::env(AIOT_QWEN_IP)]} {set out $root/build/qwen-fast-artifacts}
 file mkdir $out
 set run [get_property DIRECTORY [get_runs impl_1]]
 file copy -force $run/panel_io_wrapper.bit $out/panel_io_wrapper.bit

@@ -1,0 +1,169 @@
+{
+  "baseline_commit": "b9ea48d",
+  "clock_hz": 50000000,
+  "bin_index_bits_lsb_first": [
+    "reading_weight_row",
+    "matrix_arithmetic",
+    "idle"
+  ],
+  "request_samples": [
+    7587,
+    14897,
+    96754,
+    0,
+    2695,
+    0,
+    0,
+    0
+  ],
+  "kernels": [
+    {
+      "name": "empty",
+      "runs": 1000,
+      "cycles": 176216,
+      "samples": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "Q4-query",
+      "runs": 24,
+      "cycles": 20691568,
+      "samples": [
+        3303,
+        5139,
+        35987,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "Q4-up",
+      "runs": 12,
+      "cycles": 56135280,
+      "samples": [
+        8983,
+        14031,
+        97808,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "Q4-down",
+      "runs": 12,
+      "cycles": 50347920,
+      "samples": [
+        1773,
+        11216,
+        95489,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "Q8-vocab",
+      "runs": 2,
+      "cycles": 309315112,
+      "samples": [
+        46633,
+        109288,
+        509326,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "FP-attention",
+      "runs": 200,
+      "cycles": 3376568,
+      "samples": [
+        2166,
+        1659,
+        3449,
+        0,
+        4,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "web_request": {
+    "question": "一盏红灯加两盏绿灯，一共有几盏灯？",
+    "answer": "一盏红灯加两盏绿灯，一共有三盏灯。",
+    "first_s": 161.31,
+    "done": true,
+    "pl_ops": [
+      888,
+      888,
+      888,
+      888,
+      868,
+      868,
+      868,
+      12432,
+      12432,
+      17
+    ],
+    "backend": "pl",
+    "limited": false,
+    "timings": {
+      "prompt_per_token_ms": 3839.655904761905,
+      "predicted_per_second": 0.09689201037202753,
+      "predicted_n": 17,
+      "predicted_ms": 175453.063,
+      "prompt_n": 42,
+      "predicted_per_token_ms": 10320.768411764706,
+      "prompt_ms": 161265.548,
+      "prompt_per_second": 0.2604400042097026
+    },
+    "pl_cycles": 16509626400,
+    "pl_calls": 31037,
+    "pl_layers": [
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1295,
+      1235
+    ]
+  }
+}

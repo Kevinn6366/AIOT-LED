@@ -20,11 +20,13 @@ PS 负责分词、嵌入查表、归一化、RoPE、Softmax、逐元素运算、
 ## 构建与复测
 
 1. 在映射到项目的 R 盘根目录用 Vivado HLS 2019.1 执行 `vivado_hls -f hardware/qwen/sim.tcl`。仿真覆盖 Q4、Q8、浮点点积、单双列、行尾和 4864 维输入。运行 `hardware/qwen/build-ip.ps1` 导出 IP。
-2. 在 Vivado Tcl Console 设置环境变量 `AIOT_GPT_RTL=R:/build/zybogpt/hw/gen` 和 `AIOT_QWEN_IP=R:/build/qwen_all_hls/sol/impl/ip`，执行 `source hardware/panel.tcl`。工程位于 `build/qwen-all-panel`，位流及 HDF 位于 `build/qwen-all-artifacts`。
-3. 执行 `device/build-qwen.ps1` 编译 ARM ELF。在位流目录运行 `bootgen -arch zynq -image ../../hardware/network.bif -process_bitstream bin -w`。按项目 SD 流程打包，构建 FIT 时设置 `AIOT_QPROJ=1` 和 `AIOT_BIT_BIN=build/qwen-all-artifacts/panel_io_wrapper.bit.bin`。
+2. 在 Vivado Tcl Console 设置环境变量 `AIOT_GPT_RTL=R:/build/zybogpt/hw/gen` 和 `AIOT_QWEN_IP=R:/build/qwen_fast_hls/sol/impl/ip`，执行 `source hardware/panel.tcl`。工程位于 `build/qwen-fast-panel`，位流及 HDF 位于 `build/qwen-fast-artifacts`。
+3. 执行 `device/build-qwen.ps1` 编译 ARM ELF。在位流目录运行 `bootgen -arch zynq -image ../../hardware/network.bif -process_bitstream bin -w`。按项目 SD 流程打包，构建 FIT 时设置 `AIOT_QPROJ=1` 和 `AIOT_BIT_BIN=build/qwen-fast-artifacts/panel_io_wrapper.bit.bin`。
 4. 签名写入备用槽并重启。在装有 Playwright 和 Edge 的电脑上运行 `python tests/compare_qwen.py`。脚本先预热权重，再交替测试两个后端。切换后端会清除旧 KV，核对各轮提示 token 数和输出一致。详细记录写入 `build/qwen/web-comparison.json`。
 
-## 2026-11-28 开发板网页实测
+流水核的诊断数据与更新后的网页测试见[全层 PL 性能实验](qwen-performance.md)。
+
+## 2026-11-28 开发板网页实测（原全层核）
 
 在同一块 ZYBO Z7-20 上使用固件 `12a39286aa2c`，从本机 Edge 的 `/llm` 提交“一盏红灯加两盏绿灯，一共有几盏灯？”。权重已预热，每次切换后重新计算 42 个提示 token，生成 17 个 token。四次回答均为“一盏红灯加两盏绿灯，一共有三盏灯。”首字按浏览器收到可见输出计时，生成速度取板端 llama.cpp 的解码统计。[四次请求及板端计数](qwen-web-comparison.json)
 
