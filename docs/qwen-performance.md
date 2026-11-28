@@ -1,6 +1,6 @@
 # Qwen 全层 PL 性能实验
 
-使用 ZYBO Z7-20、50 MHz 的 PL 矩阵核、64 位 AXI HP0、同一个 Q4_0 GGUF 和 ARM ELF。两种后端都运行在板上，PC 上的 Edge 负责输入和显示。
+使用 ZYBO Z7-20，对每一版固件分别用同一个 Q4_0 GGUF 和 ARM ELF 比较两种后端。原位流的矩阵核和 HP0 工作在 50 MHz。两种后端都运行在板上，PC 上的 Edge 负责输入和显示。
 
 ## 原位流的分段实测
 
@@ -53,6 +53,12 @@
 
 三到四列提示词共享一行权重。单列或双列时，把量化输出行平分给 HP0 和 HP2，两个读引擎各自连续取数，左右两对乘加通路各算一组行。这样同时生成两个不同行的结果。PS 在同一个 KV 组内按向量填满两个浮点注意力通路。板上只有一个 Qwen 请求在运行。HP0/HP1 和 HP2/HP3 分别连接两个 DDR 控制器端口。[AMD DDR 控制器连接说明](https://docs.amd.com/r/en-US/ug1145-sdk-system-performance/Evaluating-DDR-Controller-Settings)
 
-本次 A 槽固件 `bdf7ca62b59d` 的 Qwen 时钟为 110 MHz，使用 33,832 个 LUT、72 个 BRAM Tile 和 215 个 DSP。125 MHz 初次布线未满足建立时间。用对应 110 MHz Clocking Wizard 的两项 MMCM 参数重用同一布线，并核对生成时钟、保持时间、硬件描述中的 BIT。最终 WNS 0.467 ns、WHS 0.010 ns。重建此物理变体时，用 `AIOT_QWEN_ROUTE_125=1` 运行本提交的 BD 脚本保留原布线，然后清除此变量，生成 110 MHz 工程的硬件描述，再在 Vivado 中执行 `hardware/qwen/reclock-dual.tcl`。只导出通过时序的位流。
+本次 A 槽固件 `bdf7ca62b59d` 的 Qwen 时钟为 110 MHz，使用 33,832 个 LUT、72 个 BRAM Tile 和 215 个 DSP。125 MHz 初次布线未满足建立时间。用对应 110 MHz Clocking Wizard 的两项 MMCM 参数重用同一布线，并核对生成时钟、保持时间、硬件描述中的 BIT。最终 WNS 0.467 ns、WHS 0.010 ns。重建此物理变体时，用 `AIOT_QWEN_ROUTE_125=1` 运行 [76006e9 的 BD 脚本](https://github.com/Kevinn6366/AIOT-LED/blob/76006e9/hardware/panel.tcl)保留原布线，然后清除此变量，生成 110 MHz 工程的硬件描述，再在 Vivado 中执行 `hardware/qwen/reclock-dual.tcl`。只导出通过时序的位流。
 
 两轮 PL 首字分别为 9.82、9.83 秒；速度为 1.864、1.863 token/s。两轮 PS 首字均为 24.82 秒；速度为 1.040、1.040 token/s。回答一致，PL 的 24 层和十类运算都有回读。最后一个解码图的词表输出由约 258 毫秒降到 96 毫秒，FFN gate、up 分别由约 200 毫秒降到 73 毫秒。[双端口原始网页记录](qwen-dual-comparison.json)
+
+## 四行并行候选（110 MHz）
+
+单列解码时，HP0、HP1、HP2、HP3 分别读取一个 64 行块的四个连续分区，每路计算 16 个输出行。双列使用两路各计算两列，三列和四列共用一行权重。C 仿真用四块独立存储核对各端口的地址和输出顺序。Vivado 布线后 WNS 0.425 ns、WHS 0.024 ns，用量为 38,128 LUT、78 BRAM Tile 和 211 DSP。
+
+B 槽固件 82c9347f426d 能启动 PetaLinux 和灯控，但 Qwen 预热时多次重启。Windows 在 14:09:22 至 14:09:24 记录到 COM3 掉线并重新枚举。未取得此固件的有效网页推理成绩，原因尚未确定。板上已重新选择双端口固件 bdf7ca62b59d。

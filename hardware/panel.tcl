@@ -4,12 +4,7 @@ set project_dir $root/build/rgb-vivado
 if {[info exists ::env(AIOT_GPT_RTL)]} {
     set project_dir $root/build/gpt-panel
 }
-if {[info exists ::env(AIOT_QWEN_IP)]} {
-    set qfreq 110.000
-    set variant qwen-dual110
-    if {[info exists ::env(AIOT_QWEN_ROUTE_125)]} {set qfreq 125.000; set variant qwen-dual}
-    set project_dir $root/build/${variant}-panel
-}
+if {[info exists ::env(AIOT_QWEN_IP)]} {set project_dir $root/build/qwen-fourhp-panel}
 create_project panel $project_dir -part xc7z020clg400-1
 set_property board_part [lindex [get_board_parts digilentinc.com:zybo-z7-20:part0:*] end] [current_project]
 create_bd_design panel_io
@@ -99,11 +94,11 @@ if {[info exists ::env(AIOT_GPT_RTL)]} {
 if {[info exists ::env(AIOT_QWEN_IP)]} {
     set_property ip_repo_paths [file normalize $::env(AIOT_QWEN_IP)] [current_project]
     update_ip_catalog
-    set_property -dict {CONFIG.PCW_USE_S_AXI_HP0 1 CONFIG.PCW_USE_S_AXI_HP2 1} [get_bd_cells ps]
+    set_property -dict {CONFIG.PCW_USE_S_AXI_HP0 1 CONFIG.PCW_USE_S_AXI_HP2 1 CONFIG.PCW_USE_S_AXI_HP1 1 CONFIG.PCW_USE_S_AXI_HP3 1} [get_bd_cells ps]
     create_bd_cell -type ip -vlnv xilinx.com:hls:qwen_qproj:1.0 qproj
     # Leave the legacy panel, GPT, PS GP0 and telemetry on FCLK0.
     # Only the matrix accelerator and its HP0 memory port use the faster clock.
-    ip qclk clk_wiz [list CONFIG.PRIM_IN_FREQ 50.000 CONFIG.CLKOUT1_REQUESTED_OUT_FREQ $qfreq CONFIG.USE_RESET false]
+    ip qclk clk_wiz {CONFIG.PRIM_IN_FREQ 50.000 CONFIG.CLKOUT1_REQUESTED_OUT_FREQ 110.000 CONFIG.USE_RESET false}
     wire ps/FCLK_CLK0 qclk/clk_in1
     ip qreset proc_sys_reset {CONFIG.C_EXT_RESET_HIGH 0}
     wire qclk/clk_out1 qreset/slowest_sync_clk
@@ -118,7 +113,7 @@ if {[info exists ::env(AIOT_QWEN_IP)]} {
     connect_bd_intf_net [get_bd_intf_pins ps_axi_periph/${mi}_AXI] [get_bd_intf_pins qproj/s_axi_control]
     wire qclk/clk_out1 ps_axi_periph/${mi}_ACLK
     wire qreset/peripheral_aresetn ps_axi_periph/${mi}_ARESETN
-    foreach {port hp core} {0 hp qhp 2 hp2 qhp2} {
+    foreach {port hp core} {0 hp qhp 2 hp2 qhp2 1 hp1 qhp1 3 hp3 qhp3} {
         ip $core axi_protocol_converter {CONFIG.MI_PROTOCOL AXI3}
         connect_bd_intf_net [get_bd_intf_pins qproj/m_axi_${hp}] [get_bd_intf_pins ${core}/S_AXI]
         connect_bd_intf_net [get_bd_intf_pins ${core}/M_AXI] [get_bd_intf_pins ps/S_AXI_HP${port}]
@@ -131,6 +126,8 @@ if {[info exists ::env(AIOT_QWEN_IP)]} {
     assign_bd_address -offset 0x43C10000 -range 64K -target_address_space [get_bd_addr_spaces ps/Data] [get_bd_addr_segs qproj/s_axi_control/Reg]
     assign_bd_address -offset 0 -range 1G -target_address_space [get_bd_addr_spaces qproj/Data_m_axi_hp] [get_bd_addr_segs ps/S_AXI_HP0/HP0_DDR_LOWOCM]
     assign_bd_address -offset 0 -range 1G -target_address_space [get_bd_addr_spaces qproj/Data_m_axi_hp2] [get_bd_addr_segs ps/S_AXI_HP2/HP2_DDR_LOWOCM]
+    assign_bd_address -offset 0 -range 1G -target_address_space [get_bd_addr_spaces qproj/Data_m_axi_hp1] [get_bd_addr_segs ps/S_AXI_HP1/HP1_DDR_LOWOCM]
+    assign_bd_address -offset 0 -range 1G -target_address_space [get_bd_addr_spaces qproj/Data_m_axi_hp3] [get_bd_addr_segs ps/S_AXI_HP3/HP3_DDR_LOWOCM]
     ip qclock c_counter_binary {CONFIG.Output_Width 32 CONFIG.CE false}
     wire ps/FCLK_CLK0 qclock/CLK
     ip qcycles axi_gpio {CONFIG.C_GPIO_WIDTH 32 CONFIG.C_ALL_INPUTS 1}
@@ -148,15 +145,12 @@ set_property top panel_io_wrapper [current_fileset]
 add_files -fileset constrs_1 -norecurse $root/hardware/panel.xdc
 update_compile_order -fileset sources_1
 open_bd_design $diagram
-if {[info exists ::env(AIOT_INCREMENTAL_DCP)]} {
-    set_property incremental_checkpoint [file normalize $::env(AIOT_INCREMENTAL_DCP)] [get_runs impl_1]
-}
 launch_runs impl_1 -to_step write_bitstream -jobs 4
 wait_on_run impl_1
 if {[get_property PROGRESS [get_runs impl_1]] ne "100%"} {error "Implementation failed"}
 set out $root/build/artifacts
 if {[info exists ::env(AIOT_GPT_RTL)]} {set out $root/build/gpt-artifacts}
-if {[info exists ::env(AIOT_QWEN_IP)]} {set out $root/build/${variant}-artifacts}
+if {[info exists ::env(AIOT_QWEN_IP)]} {set out $root/build/qwen-fourhp-artifacts}
 file mkdir $out
 set run [get_property DIRECTORY [get_runs impl_1]]
 file copy -force $run/panel_io_wrapper.bit $out/panel_io_wrapper.bit

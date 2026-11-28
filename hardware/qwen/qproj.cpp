@@ -81,11 +81,13 @@ static float sum8(const float values[8]) {
     return sum;
 }
 
-// For one/two columns, lanes 2 and 3 work on a second row from HP2.
+// A single decode vector uses all four lanes for four independent output rows.
+// Two columns use row pairs from HP0 and HP2.
 // For three/four columns, both lane pairs share the HP0 row.
 static void quant_rows(hls::stream<WeightBlock>& first, hls::stream<WeightBlock>& second,
+                       hls::stream<WeightBlock>& hp1, hls::stream<WeightBlock>& hp3,
                        const Word x[4][760], hls::stream<PartialSums>& tails,
-                       unsigned blocks, unsigned rows, bool wide, bool split) {
+                       unsigned blocks, unsigned rows, bool wide, bool split, bool quad) {
     float acc[4][8];
 #pragma HLS ARRAY_PARTITION variable=acc complete dim=1
 #pragma HLS RESOURCE variable=acc core=RAM_2P_LUTRAM
@@ -96,10 +98,12 @@ static void quant_rows(hls::stream<WeightBlock>& first, hls::stream<WeightBlock>
 #pragma HLS DEPENDENCE variable=acc inter distance=8 true
         WeightBlock left=first.read();
         WeightBlock right=split ? second.read() : left;
+        WeightBlock lane1=quad ? hp1.read() : left;
+        WeightBlock lane3=quad ? hp3.read() : right;
         PartialSums partial;
         for (unsigned c=0;c<4;++c) {
 #pragma HLS UNROLL
-            WeightBlock w=c<2 ? left : right;
+            WeightBlock w=c==0 ? left : c==1 ? lane1 : c==2 ? right : lane3;
             int dot=0;
             for (unsigned p=0;p<4;++p) {
 #pragma HLS UNROLL
@@ -126,7 +130,7 @@ static void quant_rows(hls::stream<WeightBlock>& first, hls::stream<WeightBlock>
 }
 
 static void finish_rows(hls::stream<PartialSums>& tails, Word result[128],
-                        unsigned blocks, unsigned rows, bool four, bool split) {
+                        unsigned blocks, unsigned rows, bool four, bool split, bool quad) {
     for (unsigned row=0;row<rows;++row) {
         float lane[4][8]={};
 #pragma HLS ARRAY_PARTITION variable=lane complete dim=1
@@ -147,32 +151,46 @@ static void finish_rows(hls::stream<PartialSums>& tails, Word result[128],
                 sums[c]+=lane[c][k];
             }
         }
-        unsigned dst=four ? 2*row : row;
-        result[dst]=((Word)pack(sums[1])<<32)|pack(sums[0]);
-        if (four || split) result[four ? dst+1 : dst+rows]=((Word)pack(sums[3])<<32)|pack(sums[2]);
+        if (quad) {
+            for (unsigned c=0;c<4;++c) result[row+c*rows]=pack(sums[c]);
+        } else {
+            unsigned dst=four ? 2*row : row;
+            result[dst]=((Word)pack(sums[1])<<32)|pack(sums[0]);
+            if (four || split) result[four ? dst+1 : dst+rows]=((Word)pack(sums[3])<<32)|pack(sums[2]);
+        }
     }
 }
 
-static void quant_tile(const Word *weights, const Word *other, const Word x[4][760],
+static void quant_tile(const Word *weights, const Word *other, const Word *port1, const Word *port3,
+                       const Word x[4][760],
                        Word result[128], unsigned blocks, unsigned groups, bool wide,
-                       bool four, bool split) {
+                       bool four, bool split, bool quad) {
 #pragma HLS DATAFLOW
-    hls::stream<Word> words0,words2;
-    hls::stream<WeightBlock> packed0,packed2;
+    hls::stream<Word> words0,words2,words1,words3;
+    hls::stream<WeightBlock> packed0,packed2,packed1,packed3;
     hls::stream<PartialSums> tails;
 #pragma HLS STREAM variable=words0 depth=64
 #pragma HLS STREAM variable=words2 depth=64
 #pragma HLS STREAM variable=packed0 depth=16
 #pragma HLS STREAM variable=packed2 depth=16
+#pragma HLS STREAM variable=words1 depth=64
+#pragma HLS STREAM variable=words3 depth=64
+#pragma HLS STREAM variable=packed1 depth=16
+#pragma HLS STREAM variable=packed3 depth=16
 #pragma HLS STREAM variable=tails depth=32
     unsigned count=groups*(blocks/4)*(wide ? 17 : 9);
     unsigned second=split ? count : 0;
+    unsigned extra=quad ? count : 0;
     fetch(weights,count,words0);
     fetch(other,second,words2);
+    fetch(port1,extra,words1);
+    fetch(port3,extra,words3);
+    assemble(words1,packed1,extra,wide);
+    assemble(words3,packed3,extra,wide);
     assemble(words0,packed0,count,wide);
     assemble(words2,packed2,second,wide);
-    quant_rows(packed0,packed2,x,tails,blocks,groups,wide,split);
-    finish_rows(tails,result,blocks,groups,four,split);
+    quant_rows(packed0,packed2,packed1,packed3,x,tails,blocks,groups,wide,split,quad);
+    finish_rows(tails,result,blocks,groups,four,split,quad);
 }
 
 static void attention_tile(const Word *weights, const Word x[4][760],
@@ -196,10 +214,13 @@ static void attention_tile(const Word *weights, const Word x[4][760],
 // Addresses are physical 64-bit word indices in the reserved HP0 window.
 // Formats 0 and 1 use Q4_0 or Q8_0 weights and Q8_0 activations.
 // Format 2 consumes packed pairs of FP32 values for attention score/value products.
-void qwen_qproj(Word *mem, const Word *mem2, unsigned weight, unsigned input, unsigned output,
+void qwen_qproj(Word *mem, const Word *mem2, const Word *mem1, const Word *mem3,
+                unsigned weight, unsigned input, unsigned output,
                 unsigned width, unsigned rows, unsigned cols, unsigned format) {
-#pragma HLS INTERFACE m_axi port=mem offset=off bundle=hp depth=134217728 max_read_burst_length=128
-#pragma HLS INTERFACE m_axi port=mem2 offset=off bundle=hp2 depth=134217728 max_read_burst_length=128
+#pragma HLS INTERFACE m_axi port=mem offset=off bundle=hp depth=134217728 max_read_burst_length=16 num_read_outstanding=32
+#pragma HLS INTERFACE m_axi port=mem2 offset=off bundle=hp2 depth=134217728 max_read_burst_length=16 num_read_outstanding=32
+#pragma HLS INTERFACE m_axi port=mem1 offset=off bundle=hp1 depth=134217728 max_read_burst_length=16 num_read_outstanding=16
+#pragma HLS INTERFACE m_axi port=mem3 offset=off bundle=hp3 depth=134217728 max_read_burst_length=16 num_read_outstanding=16
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 #pragma HLS INTERFACE s_axilite port=weight bundle=control offset=0x10
 #pragma HLS INTERFACE s_axilite port=input bundle=control offset=0x18
@@ -227,6 +248,7 @@ void qwen_qproj(Word *mem, const Word *mem2, unsigned weight, unsigned input, un
             Word v=mem[input+c*xs+i];
             x[c][i]=v;
             if (!four && c<2) x[c+2][i]=v;
+            if (cols==1) {x[1][i]=v; x[3][i]=v;}
         }
     }
     Word result[128];
@@ -236,8 +258,12 @@ void qwen_qproj(Word *mem, const Word *mem2, unsigned weight, unsigned input, un
         if (format==2) attention_tile(tile,x,result,stride,n);
         else {
             bool split=!four && !(n&1);
-            unsigned groups=split ? n/2 : n;
-            quant_tile(tile,mem2+weight+(first+(split ? groups : 0))*stride,x,result,blocks,groups,format==1,four,split);
+            bool quad=cols==1 && !(n&3);
+            unsigned groups=quad ? n/4 : split ? n/2 : n;
+            unsigned offset1=weight+(first+(quad ? groups : 0))*stride;
+            unsigned offset2=weight+(first+(quad ? 2*groups : split ? groups : 0))*stride;
+            unsigned offset3=weight+(first+(quad ? 3*groups : 0))*stride;
+            quant_tile(tile,mem2+offset2,mem1+offset1,mem3+offset3,x,result,blocks,groups,format==1,four,split,quad);
         }
         memcpy(mem+output+first*(four ? 2 : 1),result,n*(four ? 2 : 1)*sizeof(Word));
     }

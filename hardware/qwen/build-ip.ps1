@@ -2,7 +2,7 @@ param([string]$VivadoBin = 'D:/vivado/Vivado/2019.1/bin')
 $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '../..')
 & "$VivadoBin/vivado_hls.bat" -f hardware/qwen/hls.tcl -l build/qwen-hls.log
-$ip = 'build/qwen_dual_hls/sol/impl/ip'
+$ip = 'build/qwen_fourhp_hls/sol/impl/ip'
 $log = Join-Path $ip 'autoimpl.log'
 # The 2019.1 packager encodes dates beyond 2021 as an overflowing 32-bit revision.
 if ((Test-Path $log) -and (Select-String $log -Quiet -Pattern 'bad lexical cast') -and

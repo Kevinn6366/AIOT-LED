@@ -9,18 +9,18 @@
 | 注意力分数与注意力加权求和 | 每层 2 个 | KV 缓存和量化至 FP16 的右操作数，展开为 FP32 后相乘 |
 | 词表输出头 | 1 个 | Q8_0 权重，151936 行 |
 
-PS 负责分词、嵌入查表、归一化、RoPE、Softmax、逐元素运算、激活量化、调度与采样。PL 选项把该模型图中的每个 MUL_MAT 交给 HP0 核，输出直接回填对应张量。遇到未知矩阵或超时会报错。首次遇到每类运算时，主机还对采样行做 CPU 数值比对。
+PS 负责分词、嵌入查表、归一化、RoPE、Softmax、逐元素运算、激活量化、调度与采样。PL 选项把该模型图中的每个 MUL_MAT 交给 PL 矩阵核，输出直接回填对应张量。遇到未知矩阵或超时会报错。首次遇到每类运算时，主机还对采样行做 CPU 数值比对。
 
 ## 存储与计数
 
-设备树在 DDR 的 `0x20000000` 起保留 432 MiB。168 个层权重和 1 个输出头首次使用时重排一次，驻留约 329.90 MiB。每四个 32 权重块共用一个 64 位头，保存原 GGUF 的四个 FP16 缩放值。每个 Q4_0 块平均 18 字节，Q8_0 块平均 34 字节。动态注意力矩阵、输入与输出使用不重叠的暂存区。HLS 核从 64 位 HP0 读取权重，在单列和双列量化矩阵上同时经 HP2 读取另一组输出行的权重，量化矩阵一次处理最多四列，浮点注意力最多两列，按 64 行分块写回。
+设备树在 DDR 的 `0x20000000` 起保留 432 MiB。168 个层权重和 1 个输出头首次使用时重排一次，驻留约 329.90 MiB。每四个 32 权重块共用一个 64 位头，保存原 GGUF 的四个 FP16 缩放值。每个 Q4_0 块平均 18 字节，Q8_0 块平均 34 字节。动态注意力矩阵、输入与输出使用不重叠的暂存区。单列量化解码用四个 64 位 HP 端口各取一组输出行；双列用 HP0、HP2 各取一组行；三列或四列从 HP0 读取一行权重并广播给各列，量化矩阵一次处理最多四列，浮点注意力最多两列，按 64 行分块写回。
 
 网页给出本次请求的首个可见字符延迟、板端生成速度、PL 调用数、调用窗口周期和执行层数。NDJSON 完成帧另含逐层计数及十种矩阵调用计数，顺序是 Q、K、V、注意力输出、gate、up、down、注意力分数、加权求和、输出头。纯 PS 对照的 PL 增量必须为零。pl_op_cycles 统计各类运算的调用窗口，pl_last_graph_cycles 记录最后一次执行输出头的推理图；两者都使用独立的 50 MHz 参考计数器。
 
 ## 构建与复测
 
 1. 在映射到项目的 R 盘根目录用 Vivado HLS 2019.1 执行 `vivado_hls -f hardware/qwen/sim.tcl`。仿真覆盖 Q4、Q8、浮点点积、单列至四列、行尾和 4864 维输入。运行 `hardware/qwen/build-ip.ps1` 导出 IP。
-2. 在 Vivado Tcl Console 设置环境变量 `AIOT_GPT_RTL=R:/build/zybogpt/hw/gen` 和 `AIOT_QWEN_IP=R:/build/qwen_dual_hls/sol/impl/ip`，执行 `source hardware/panel.tcl`。工程位于 `build/qwen-dual110-panel`，位流及 HDF 位于 `build/qwen-dual110-artifacts`。
+2. 在 Vivado Tcl Console 设置环境变量 `AIOT_GPT_RTL=R:/build/zybogpt/hw/gen` 和 `AIOT_QWEN_IP=R:/build/qwen_fourhp_hls/sol/impl/ip`，执行 `source hardware/panel.tcl`。工程位于 `build/qwen-fourhp-panel`，位流及 HDF 位于 `build/qwen-fourhp-artifacts`。
 3. 执行 `device/build-qwen.ps1` 编译 ARM ELF。将通过时序的 BIT、HDF 导出为 `build/artifacts/qwen-panel.bit`、`qwen-panel.hdf`。在此目录运行 `bootgen -arch zynq -image ../../hardware/qwen/network.bif -process_bitstream bin -w`。按项目 SD 流程打包，构建 FIT 时设置 `AIOT_QPROJ=1`、`AIOT_BIT_BIN=build/artifacts/qwen-panel.bit.bin`。
 4. 签名写入备用槽并重启。在装有 Playwright 和 Edge 的电脑上运行 `python tests/compare_qwen.py`。脚本先预热权重，再交替测试两个后端。切换后端会清除旧 KV，核对各轮提示 token 数和输出一致。详细记录写入 `build/qwen/web-comparison.json`。
 
