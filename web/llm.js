@@ -15,7 +15,9 @@ function node(tag, content) {
 }
 function refresh() {
   const chat = mode === 'chat';
-  const mixed = chat && board?.qproj;
+  const mixed = chat && board?.qmat && board?.qproj && $('backend').value === 'pl';
+  $('backend-label').hidden = !chat || !board?.qmat || !board?.qproj;
+  $('backend').disabled = busy;
   const ready = chat ? board?.qwen : board?.gpt;
   $('online').textContent = board ? (ready ? '开发板在线 · 推理就绪' : '开发板在线 · 等待推理核') : '开发板未连接';
   $('online').classList.toggle('live', Boolean(ready));
@@ -23,8 +25,8 @@ function refresh() {
   $('phase').textContent = phases[mode];
   const route = [['浏览器', location.hostname], ['板端服务', chat ? 'Bottle → llama.cpp' : 'Bottle → FIFO → gpt.elf']];
   if (chat) {
-    route.push(['权重映射', 'SD → DDR · Q4_0'], ['ARM 推理', 'PS · Cortex-A9 × 2']);
-    if (mixed) route.push(['第一层 Q 投影', 'DDR ⇄ AXI HP0 ⇄ PL']);
+    route.push(['权重映射', 'SD → DDR · Q4_0 / Q8_0']);
+    route.push(mixed ? ['24 层矩阵与输出头', 'DDR ⇄ AXI HP0 ⇄ PL'] : ['矩阵推理', 'PS · Cortex-A9 × 2']);
   } else route.push(['寄存器读写', 'UIO → AXI-Lite'], ['字符推理核', 'PL · BRAM · 50 MHz']);
   $('route').replaceChildren(...route.map(([name, info]) => {
     const li = node('li', name); li.append(node('small', info)); return li;
@@ -32,7 +34,7 @@ function refresh() {
   const data = readings[mode];
   const fields = [['首字符', data.first], [chat ? '生成速度' : 'PL 吞吐（含输入）', data.rate]];
   if (!chat || mixed || data.calls) fields.push(['PL 周期' + (chat ? '（调用窗口）' : ''), data.cycles]);
-  if (chat && (mixed || data.calls)) fields.push(['Q 投影调用', data.calls]);
+  if (chat && data.backend) fields.push(['本次后端', data.backend], ['PL 矩阵调用', data.calls], ['已执行层', data.layers]);
   $('metrics').replaceChildren(...fields.map(([name, value]) => {
     const line = document.createElement('div'); line.append(node('dt', name), node('dd', value ?? '—')); return line;
   }));
@@ -61,6 +63,7 @@ function select(next) {
 for (const key of Object.keys(modes)) $(key).onclick = () => select(key);
 $('example').onclick = () => { $('prompt').value = modes[mode].example; $('prompt').focus(); refresh(); };
 $('prompt').oninput = refresh;
+$('backend').onchange = refresh;
 $('prompt').onkeydown = (event) => {
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
     event.preventDefault(); if (!$('send').disabled) $('composer').requestSubmit();
@@ -90,7 +93,7 @@ $('composer').onsubmit = async (event) => {
   let count = 0, done = false, buffer = '';
   try {
     const response = await fetch(chat ? '/api/chat' : '/api/generate', {method: 'POST',
-      headers: {'Content-Type': 'application/json'}, body: JSON.stringify(chat ? {question: prompt} :
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify(chat ? {question: prompt, backend: board?.qmat && board?.qproj ? $('backend').value : 'ps'} :
         {prompt, seed: Number($('seed').value), length: Math.min(64, 128 - prompt.length)})});
     if (!response.ok) throw new Error((await response.json()).error || '请求失败');
     const reader = response.body.getReader(), decoder = new TextDecoder();
@@ -107,7 +110,10 @@ $('composer').onsubmit = async (event) => {
           done = true; phases[key] = frame.limited ? '已达到输出上限' : '生成完成';
           if (chat) {
             data.rate = frame.timings.predicted_per_second.toFixed(2) + ' token/s';
-            if (frame.pl_calls) { data.calls = frame.pl_calls; data.cycles = frame.pl_cycles.toLocaleString(); }
+            data.backend = frame.backend === 'pl' ? 'PL' : 'PS';
+            data.calls = frame.pl_calls;
+            data.cycles = (frame.pl_cycles || 0).toLocaleString();
+            data.layers = frame.pl_layers ? frame.pl_layers.filter(n => n > 0).length + ' / 24' : '—';
           }
         } else if (frame.text || frame.char) {
           if (!count) data.first = ((performance.now()-start)/1000).toFixed(2) + ' s';

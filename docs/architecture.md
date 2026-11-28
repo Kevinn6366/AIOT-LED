@@ -14,4 +14,4 @@
 
 ZyboGPT 扩展在同一 Block Design 中增加独立 AXI-Lite 从设备（0x43C00000）。本机网页发送提示词，板端 Bottle 通过 FIFO 交给 SDK C 程序；程序经 UIO 启动推理核并读取字符与周期计数。详见 [ZyboGPT 英文续写](zybogpt.md)。
 
-中文问答经本机网页、板端 Bottle 和回环 HTTP 接口进入 PS 上的 Qwen2.5-0.5B-Instruct。ARM 程序从 SD 卡映射量化权重。带 Q 投影核的固件在 ggml 图中经 GP0 启动 PL，PL 通过 HP0 访问专用 DDR 区并返回第一层 Q 投影结果。详见 [PS/PL 数据通路](qwen-pl.md)。详见[板端中文问答](qwen.md)。
+中文问答经本机网页、板端 Bottle 和回环 HTTP 接口进入 PS 上的 Qwen2.5-0.5B-Instruct。ARM 程序从 SD 卡映射量化权重。全层版在 ggml 图中经 GP0 调度 PL，PL 通过 HP0 访问专用 DDR 并回写 24 层和词表头的矩阵结果。纯 PS 模式使用 ARM NEON。详见 [PS/PL 数据通路](qwen-matrices.md)。

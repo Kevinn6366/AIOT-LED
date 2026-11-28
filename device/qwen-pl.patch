@@ -1,5 +1,33 @@
+diff --git a/examples/server/server.cpp b/examples/server/server.cpp
+index 3992108..1281dac 100644
+--- a/examples/server/server.cpp
++++ b/examples/server/server.cpp
+@@ -27,6 +27,7 @@
+ #include "index.js.hpp"
+ #include "completion.js.hpp"
+ #include "system-prompts.js.hpp"
++extern "C" int aiot_use_ps;
+ #include "prompt-formats.js.hpp"
+ #include "json-schema-to-grammar.mjs.hpp"
+ #include "loading.html.hpp"
+@@ -852,6 +853,15 @@ struct server_context {
+         // Sampling parameter defaults are loaded from the global server context (but individual requests can still override them)
+         auto default_sparams = params.sparams;
+         const auto & data = task.data;
++        if (getenv("AIOT_QPROJ")) {
++            GGML_ASSERT(slots.size() == 1);
++            const int ps = json_value(data, "aiot_ps", false);
++            if (ps != aiot_use_ps) {
++                llama_kv_cache_seq_rm(ctx, slot.id + 1, -1, -1);
++                slot.cache_tokens.clear();
++                aiot_use_ps = ps;
++            }
++        }
+
+         if (data.count("__oaicompat") != 0) {
+             slot.oaicompat = true;
 diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c
-index 7e24313..391db14 100644
+index 7e24313..fd35cdd 100644
 --- a/ggml/src/ggml.c
 +++ b/ggml/src/ggml.c
 @@ -12373,6 +12373,8 @@ static void ggml_compute_forward_group_norm(
@@ -11,18 +39,20 @@ index 7e24313..391db14 100644
  static void ggml_compute_forward_mul_mat_one_chunk(
      const struct ggml_compute_params * params,
      struct ggml_tensor * dst,
-@@ -12569,6 +12571,15 @@ UseGgmlGemm1:;
+@@ -12569,6 +12571,17 @@ UseGgmlGemm1:;
 
      ggml_barrier(params->threadpool);
 
-+    if (type == GGML_TYPE_Q4_0 && ne00 == 896 && ne01 == 896 && ne12 == 1 && ne13 == 1 &&
-+        src1->type == GGML_TYPE_F32 && strcmp(src0->name, "blk.0.attn_q.weight") == 0 &&
-+        getenv("AIOT_QPROJ") != NULL) {
-+        if (ith == 0) qproj_run(src0, params->wdata, dst, ne11);
++    if (getenv("AIOT_QPROJ") && !aiot_use_ps) {
++        if (ith == 0) {
++            const bool converted = src1->type != vec_dot_type;
++            size_t stride = converted ? ggml_row_size(vec_dot_type, ne10) : nb11;
++            qall_matmul(src0, converted ? params->wdata : src1->data, dst, stride,
++                        converted ? stride*ne11 : nb12);
++        }
 +        ggml_barrier(params->threadpool);
 +        return;
 +    }
-+
 +
  #if GGML_USE_LLAMAFILE
      if (src1->type != vec_dot_type) {

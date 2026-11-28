@@ -23,10 +23,10 @@ with sync_playwright() as playwright:
     page.locator('#chat').click()
     page.locator('#prompt').fill('中国的首都是哪里？请只回答城市名。')
     page.locator('#send').click(timeout=180000)
-    page.wait_for_function("document.querySelector('#phase').textContent === '生成完成'", timeout=180000)
+    page.wait_for_function("document.querySelector('#phase').textContent === '生成完成'", timeout=900000)
     answer = page.locator('#chat-log .assistant span').inner_text()
     assert '北京' in answer, answer
-    assert int(page.locator('#metrics div').filter(has_text='Q 投影调用').locator('dd').inner_text()) > 0
+    assert int(page.locator('#metrics div').filter(has_text='PL 矩阵调用').locator('dd').inner_text()) > 0
     print('Qwen:', answer, page.locator('#metrics').inner_text(), flush=True)
     page.screenshot(path=str(root / 'build/qwen/llm-edge.png'))
     page.set_viewport_size({'width': 390, 'height': 844})

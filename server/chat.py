@@ -14,7 +14,7 @@ PREFIX = ('<|im_start|>system\n你是一个中文助手。请简短、准确地�
 def warm_prefix():
     # Prime only the shared instruction, before accepting interactive questions.
     for _ in range(120):
-        conn = http.client.HTTPConnection('127.0.0.1', 8091, timeout=120)
+        conn = http.client.HTTPConnection('127.0.0.1', 8091, timeout=480)
         try:
             body = json.dumps(dict(prompt=PREFIX, n_predict=1, cache_prompt=True,
                                    temperature=0))
@@ -34,10 +34,12 @@ def warm_prefix():
 def projection_counts():
     try:
         with open('/tmp/aiot-led/qproj.stats') as stats:
-            calls, cycles = map(int, stats.read().split())
-            return calls, cycles
+            values = tuple(map(int, stats.read().split()))
+            if len(values) == 36:
+                return values
     except (ValueError, OSError):
-        return 0, 0
+        pass
+    return (0,) * 36
 
 
 def register(app):
@@ -52,15 +54,19 @@ def register(app):
         if not isinstance(question, str) or not 1 <= len(question.strip()) <= 96 or '<|' in question:
             bottle.response.status = 400
             return {'error': '请输入 1 至 96 字的问题'}
+        backend = data.get('backend', 'pl' if projection_counts()[0] else 'ps')
+        if backend not in ('ps', 'pl') or (backend == 'pl' and not projection_counts()[0]):
+            bottle.response.status = 400
+            return {'error': '所选推理后端不可用'}
         if not active.acquire(False):
             bottle.response.status = 409
             return {'error': '开发板正在回答另一个问题'}
         baseline = projection_counts()
-        conn = http.client.HTTPConnection('127.0.0.1', 8091, timeout=180)
+        conn = http.client.HTTPConnection('127.0.0.1', 8091, timeout=480)
         try:
             prompt = PREFIX + question.strip() + '<|im_end|>\n<|im_start|>assistant\n'
             body = json.dumps(dict(prompt=prompt, n_predict=80, temperature=0,
-                                   stream=True, cache_prompt=True, stop=['<|im_end|>']))
+                                   stream=True, cache_prompt=True, aiot_ps=backend == 'ps', stop=['<|im_end|>']))
             conn.request('POST', '/completion', body, {'Content-Type': 'application/json'})
             upstream = conn.getresponse()
             if upstream.status != 200:
@@ -78,9 +84,10 @@ def register(app):
                         continue
                     item = json.loads(line[5:].decode('utf-8'))
                     if item.get('stop'):
-                        calls, cycles = projection_counts()
-                        yield json.dumps(dict(done=True, pl_calls=calls-baseline[0],
-                                              pl_cycles=cycles-baseline[1], timings=item['timings'],
+                        delta = [v-b for v, b in zip(projection_counts(), baseline)]
+                        yield json.dumps(dict(done=True, backend=backend, pl_calls=delta[0],
+                                              pl_layers=delta[2:26], pl_ops=delta[26:],
+                                              pl_cycles=delta[1], timings=item['timings'],
                                               limited=item.get('stopped_limit', False))) + '\n'
                         return
                     yield json.dumps(dict(text=item['content'])) + '\n'

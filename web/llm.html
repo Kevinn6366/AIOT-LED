@@ -11,7 +11,7 @@
 <div class="title"><h1>模型工作台</h1><span id="online" role="status">正在连接开发板</span></div>
 <div class="workspace">
 <section class="studio" aria-label="模型对话框">
-  <div class="toolbar"><div class="switch" aria-label="推理模式"><button id="chat" aria-pressed="true">Chat</button><button id="write" aria-pressed="false">续写</button></div><code id="model"></code></div>
+  <div class="toolbar"><div class="switch" aria-label="推理模式"><button id="chat" aria-pressed="true">Chat</button><button id="write" aria-pressed="false">续写</button></div><label id="backend-label">矩阵计算 <select id="backend"><option value="pl">PL</option><option value="ps">纯 PS</option></select></label><code id="model"></code></div>
   <div class="stream" id="stream">
     <div class="empty" id="empty"><div class="chip" aria-hidden="true"><b id="die"></b></div><h2 id="welcome"></h2><p id="intro"></p><button id="example"></button></div>
     <div id="chat-log" aria-label="问答记录"></div><div id="write-log" aria-label="续写记录" hidden></div>

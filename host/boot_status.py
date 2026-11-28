@@ -53,7 +53,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def board_request(self, path, size=0):
-        timeouts = {'/api/chat': 180, '/api/firmware': 90, '/api/generate': 5}
+        timeouts = {'/api/chat': 480, '/api/firmware': 90, '/api/generate': 5}
         conn = http.client.HTTPConnection('169.254.155.221', 8080,
                                           timeout=timeouts.get(path, 3))
         try:

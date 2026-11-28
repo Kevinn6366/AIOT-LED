@@ -4,8 +4,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
-$src = 'build/llama-qwen'
-$obj = 'build/qwen-obj'
+$src = 'build/llama-qwen-all'
+$obj = 'build/qwen-all-obj'
 if (!(Test-Path $src)) {
     git clone --depth 1 --branch b3948 https://github.com/ggml-org/llama.cpp.git $src
     if ($LASTEXITCODE) { throw 'llama.cpp download failed' }

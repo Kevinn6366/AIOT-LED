@@ -1,5 +1,7 @@
 # Qwen 第一层查询投影
 
+此页记录首层原型（提交 `0a0d337`）。现行实现见 [Qwen 全层矩阵后端](qwen-matrices.md)。
+
 模型工作台提供 Chat 和英文续写两个模式。浏览器保存当前页面上的消息和草稿，Chat 的每一条问题独立送入模型。输入区、滚动消息区和侧栏的组织参考了 [Hugging Face Chat UI](https://github.com/huggingface/chat-ui/blob/main/src/lib/components/chat/ChatWindow.svelte)。本项目使用原生 HTML、CSS 和 JavaScript，开发板运行时无需外网。
 
 ## 板端分工

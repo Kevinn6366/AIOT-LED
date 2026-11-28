@@ -6,7 +6,7 @@ ZYBO Z7-20 网页物联网电灯实验。目标是在浏览器控制板载 LED �
 
 SW0–SW3 默认直接控制 LD0–LD3。网页每半秒读取拨杆与输出，可逐路接管或恢复拨杆控制。LD4 使用 PS GPIO。LD5、LD6 各有独立的颜色选择器和开关，关闭时保留选色。详见 [PL 控制与接线](docs/panel.md)和 [PS 点灯说明](docs/ld4.md)。
 
-[模型工作台](http://127.0.0.1:8089/llm) 提供 Qwen 中文问答与 ZyboGPT 英文续写。Qwen 的第一层查询投影可交给 PL，其余模型计算运行在 PS。板端分工、数据通路和验证方法见 [Qwen 查询投影](docs/qwen-pl.md)。ARM 基线见[板端中文问答](docs/qwen.md)。
+[模型工作台](http://127.0.0.1:8089/llm) 提供 Qwen 中文问答与 ZyboGPT 英文续写。Qwen 可选择纯 PS 或 PL 全层矩阵后端。硬件覆盖、数据通路与同题对照见 [Qwen 全层矩阵后端](docs/qwen-matrices.md)。ARM 基线见[板端中文问答](docs/qwen.md)。
 
 ZyboGPT 扩展在 PL 上运行量化字符模型，经本机网页提交英文提示词。构建方法和实板验收见 [ZyboGPT 英文续写](docs/zybogpt.md)。
 
