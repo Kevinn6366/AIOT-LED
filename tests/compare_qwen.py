@@ -20,8 +20,9 @@ def ask(page, mode, prompt):
     page.wait_for_function("!document.querySelector('#backend').disabled", timeout=900000)
     assert response.ok, (response.status, response.text())
     frames = [json.loads(line) for line in response.text().splitlines()]
+    assert frames and frames[-1].get('done'), f'{mode}: stream ended without a completion frame'
     final = frames[-1]
-    assert final.get('done') and final['backend'] == mode, final
+    assert final['backend'] == mode, final
     layers = final['pl_layers']
     ops = final['pl_ops']
     assert len(layers) == 24 and len(ops) == 10
@@ -66,6 +67,8 @@ def main():
         ask(page, 'ps', '只回答数字：一加一等于几？')
         for mode in (('pl',) if profile else ('pl', 'ps', 'pl', 'ps')):
             result = ask(page, mode, prompt)
+            current = page.request.get(url + '/api/system').json()
+            assert current.get('boot_id') == state['boot_id'], 'board restarted during benchmark'
             if options.explanation:
                 assert result['timings']['predicted_n'] >= 18, result
             else:
