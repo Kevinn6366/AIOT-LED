@@ -11,7 +11,7 @@ if (!(Test-Path $src)) {
     if ($LASTEXITCODE) { throw 'llama.cpp download failed' }
 }
 if ((git -C $src rev-parse HEAD) -ne '55e47786e373c90fc7803e718e3e1dd6d53c3db6') { throw 'Unexpected llama.cpp revision' }
-foreach ($file in @('device/qwen-cortex-a9.patch', 'device/qwen-neon.patch')) {
+foreach ($file in @('device/qwen-cortex-a9.patch', 'device/qwen-neon.patch', 'device/qwen-pl.patch')) {
     $patch = (Resolve-Path $file).Path
     git -C $src apply --reverse --check --quiet $patch 2>$null
     if ($LASTEXITCODE) {
@@ -19,6 +19,7 @@ foreach ($file in @('device/qwen-cortex-a9.patch', 'device/qwen-neon.patch')) {
         if ($LASTEXITCODE) { throw "Could not apply $file" }
     }
 }
+Copy-Item device/qproj-ggml.h "$src/ggml/src/qproj-ggml.h" -Force
 $prefix = Join-Path $CompilerBin 'arm-linux-gnueabihf-'
 $flags = '-mcpu=cortex-a9 -mfpu=neon -mfloat-abi=hard -mfp16-format=ieee'
 cmake -S $src -B $obj -G Ninja "-DCMAKE_MAKE_PROGRAM=$((Get-Command $Ninja).Source)" `

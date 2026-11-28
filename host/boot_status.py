@@ -137,10 +137,10 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get('Host') not in LOCAL_HOSTS:
             return self.send_error(403)
         path = urlsplit(self.path).path
-        if path == '/':
-            data = (ASSETS / 'index.html').read_bytes()
+        if path in ('/', '/llm', '/llm/'):
+            data = (ASSETS / ('index.html' if path == '/' else 'llm.html')).read_bytes()
             mime = 'text/html; charset=utf-8'
-        elif path in ('/main.js', '/panel.css'):
+        elif path in ('/main.js', '/panel.css', '/llm.js', '/llm.css'):
             data = (ASSETS / path[1:]).read_bytes()
             mime = ('text/javascript' if path.endswith('.js') else 'text/css') + '; charset=utf-8'
         elif path == '/boot':

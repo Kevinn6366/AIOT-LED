@@ -22,3 +22,5 @@ __pycache__/
 !/build/artifacts/gpt-overlay.dtbo
 vivado_pid*.str
 !/build/artifacts/llama-server.elf
+!/build/artifacts/qwen-panel.bit
+!/build/artifacts/qwen-panel.hdf

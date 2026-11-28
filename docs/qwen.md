@@ -1,6 +1,8 @@
-# 板端中文问答
+# 板端中文问答（ARM 基线）
 
-本机控制台提交单轮中文问题，Bottle 把请求转给开发板回环地址上的 llama.cpp。Qwen2.5-0.5B-Instruct 在 PS 双核 Cortex-A9 上计算，使用 512 token 上下文、最多 80 token 回答和两条计算线程。英文续写继续使用 PL 中的 ZyboGPT。
+当前工作台位于 `/llm`，带 PL 查询投影的版本见 [Qwen 第一层查询投影](qwen-pl.md)。
+
+ARM 基线从本机控制台提交单轮中文问题，Bottle 把请求转给开发板回环地址上的 llama.cpp。Qwen2.5-0.5B-Instruct 在 PS 双核 Cortex-A9 上计算，使用 512 token 上下文、最多 80 token 回答和两条计算线程。英文续写继续使用 PL 中的 ZyboGPT。
 
 ## 从源码构建
 

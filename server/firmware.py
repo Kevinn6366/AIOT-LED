@@ -49,6 +49,7 @@ def system_state():
                 uptime=int(float(read_text('/proc/uptime', '0').split()[0])),
                 version=read_text('/etc/aiot-version', '临时部署'),
                 stage=read_text('/tmp/aiot-led/boot-stage', 'unknown'),
+                qproj=running('qwen') and os.path.isfile('/tmp/aiot-led/qproj.stats'),
                 qwen=running('qwen') and os.path.isfile('/tmp/aiot-led/qwen-ready'),
                 gpt=os.path.exists('/tmp/aiot-led/gpt-uio'),
                 ps=running('ps'), pl=running('pl'), uio=os.path.exists('/dev/uio1'),

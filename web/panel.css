@@ -44,7 +44,4 @@ button:focus-visible { outline:3px solid #2883c4; position:relative; }
 #host-tools { margin:-10px 0 18px; }
 #host-tools a { color:#075d60; }
 
-#chat-form, #gpt-form { display:flex; align-items:end; flex-wrap:wrap; gap:12px; margin:16px 0; }
-#chat-form label, #gpt-form label { display:grid; gap:4px; }
-#chat-form input, #gpt-form input { max-width:100%; box-sizing:border-box; padding:6px; font:inherit; }
-#chat-answer, #gpt-output { white-space:pre-wrap; overflow-wrap:anywhere; font-size:1rem; }
+.bar a { color:inherit; text-underline-offset:4px; }

@@ -31,6 +31,15 @@ def warm_prefix():
     return False
 
 
+def projection_counts():
+    try:
+        with open('/tmp/aiot-led/qproj.stats') as stats:
+            calls, cycles = map(int, stats.read().split())
+            return calls, cycles
+    except (ValueError, OSError):
+        return 0, 0
+
+
 def register(app):
     active = threading.Lock()
 
@@ -46,6 +55,7 @@ def register(app):
         if not active.acquire(False):
             bottle.response.status = 409
             return {'error': '开发板正在回答另一个问题'}
+        baseline = projection_counts()
         conn = http.client.HTTPConnection('127.0.0.1', 8091, timeout=180)
         try:
             prompt = PREFIX + question.strip() + '<|im_end|>\n<|im_start|>assistant\n'
@@ -68,7 +78,9 @@ def register(app):
                         continue
                     item = json.loads(line[5:].decode('utf-8'))
                     if item.get('stop'):
-                        yield json.dumps(dict(done=True, timings=item['timings'],
+                        calls, cycles = projection_counts()
+                        yield json.dumps(dict(done=True, pl_calls=calls-baseline[0],
+                                              pl_cycles=cycles-baseline[1], timings=item['timings'],
                                               limited=item.get('stopped_limit', False))) + '\n'
                         return
                     yield json.dumps(dict(text=item['content'])) + '\n'

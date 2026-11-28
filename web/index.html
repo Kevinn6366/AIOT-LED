@@ -8,7 +8,7 @@
   <script src="/main.js?v=rgb1" defer></script>
 </head>
 <body>
-  <header><div class="bar"><strong>AIOT-LED</strong><span>设备控制台</span><code>ZYBO Z7-20</code></div></header>
+  <header><div class="bar"><strong>AIOT-LED</strong><span>设备控制台</span><a href="/llm">模型工作台 ↗</a><code>ZYBO Z7-20</code></div></header>
   <main>
     <div class="heading"><h1>灯光控制</h1><span id="link" class="link">正在读取 PL</span></div>
     <p id="host-tools" hidden><a href="/boot">查看 COM3 启动监视</a></p>
@@ -34,25 +34,6 @@
       <div class="ps"><strong>LD4</strong><span id="ps-result" role="status">等待操作</span><div class="group"><button data-ps="1">开灯</button><button data-ps="0">关灯</button></div></div>
     </section>
     <p id="error" role="status"></p>
-    <section aria-labelledby="chat-title">
-      <div class="section-head"><h2 id="chat-title">中文问答</h2><code>PS / Qwen2.5-0.5B-Instruct</code></div>
-      <form id="chat-form">
-        <label>问题 <input name="question" maxlength="96" size="38" placeholder="中国的首都是哪里？" required></label>
-        <button disabled>提问</button>
-      </form>
-      <p id="chat-answer" aria-label="千问回答"></p>
-      <p class="note" id="chat-status" role="status">每次提问独立作答。</p>
-    </section>
-    <section aria-labelledby="gpt-title">
-      <div class="section-head"><h2 id="gpt-title">英文台词续写</h2><code>PL / ZyboGPT</code></div>
-      <form id="gpt-form">
-        <label>英文开头 <input name="prompt" value="ROMEO:" maxlength="96" required></label>
-        <label>采样种子 <input name="seed" type="number" min="1" max="4294967295" value="3735928559" required></label>
-        <button disabled>生成续文</button>
-      </form>
-      <pre id="gpt-output" aria-label="生成文本"></pre>
-      <p class="note" id="gpt-status" role="status">检测推理核…</p>
-    </section>
     <section aria-labelledby="boot-title">
       <div class="section-head"><h2 id="boot-title">系统状态</h2><code>SD / PetaLinux</code></div>
       <p class="note" id="boot-status">正在读取启动状态…</p>

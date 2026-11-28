@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>模型工作台 · AIOT-LED</title>
+  <link rel="stylesheet" href="/llm.css"><script defer src="/llm.js"></script>
+</head>
+<body>
+<header><a class="brand" href="/">AIOT<span>/</span>LED</a><nav aria-label="控制台导航"><a href="/">灯光控制</a><a href="/llm" aria-current="page">模型工作台</a></nav><span class="board">ZYBO Z7-20</span></header>
+<main>
+<div class="title"><h1>模型工作台</h1><span id="online" role="status">正在连接开发板</span></div>
+<div class="workspace">
+<section class="studio" aria-label="模型对话框">
+  <div class="toolbar"><div class="switch" aria-label="推理模式"><button id="chat" aria-pressed="true">Chat</button><button id="write" aria-pressed="false">续写</button></div><code id="model"></code></div>
+  <div class="stream" id="stream">
+    <div class="empty" id="empty"><div class="chip" aria-hidden="true"><b id="die"></b></div><h2 id="welcome"></h2><p id="intro"></p><button id="example"></button></div>
+    <div id="chat-log" aria-label="问答记录"></div><div id="write-log" aria-label="续写记录" hidden></div>
+  </div>
+  <form id="composer"><label class="sr" for="prompt">输入文本</label><textarea id="prompt" maxlength="96" rows="2"></textarea>
+    <div class="actions"><small id="hint">Enter 发送 · Shift+Enter 换行</small><label id="seed-label" hidden>采样种子 <input id="seed" type="number" min="1" max="4294967295" value="3735928559" required></label><button class="send" id="send" disabled>发送 ↑</button></div>
+  </form>
+</section>
+<aside><h2>推理通路</h2><ol id="route"></ol><h2>本次推理</h2><dl id="metrics"></dl><p class="phase" id="phase" role="status">等待输入</p></aside>
+</div></main></body></html>

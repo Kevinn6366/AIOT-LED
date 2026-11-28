@@ -50,6 +50,9 @@ for attempt in 1 2 3 4 5; do
         fi
         model=/run/media/mmcblk0p1/qwen/qwen.gguf
         if [ -s "$model" ]; then
+            if [ -e /proc/device-tree/reserved-memory/qwen@1e000000/no-map ]; then
+                export AIOT_QPROJ=1
+            fi
             chmod +x build/artifacts/llama-server.elf
             build/artifacts/llama-server.elf -m "$model" -t 2 -c 512 -b 32 -ub 32 \
                 --parallel 1 --threads-http 2 --host 127.0.0.1 --port 8091 >qwen.log 2>&1 </dev/null &

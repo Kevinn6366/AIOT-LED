@@ -1,0 +1,29 @@
+diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c
+index 7e24313..391db14 100644
+--- a/ggml/src/ggml.c
++++ b/ggml/src/ggml.c
+@@ -12373,6 +12373,8 @@ static void ggml_compute_forward_group_norm(
+
+ // ggml_compute_forward_mul_mat
+
++#include "qproj-ggml.h"
++
+ static void ggml_compute_forward_mul_mat_one_chunk(
+     const struct ggml_compute_params * params,
+     struct ggml_tensor * dst,
+@@ -12569,6 +12571,15 @@ UseGgmlGemm1:;
+
+     ggml_barrier(params->threadpool);
+
++    if (type == GGML_TYPE_Q4_0 && ne00 == 896 && ne01 == 896 && ne12 == 1 && ne13 == 1 &&
++        src1->type == GGML_TYPE_F32 && strcmp(src0->name, "blk.0.attn_q.weight") == 0 &&
++        getenv("AIOT_QPROJ") != NULL) {
++        if (ith == 0) qproj_run(src0, params->wdata, dst, ne11);
++        ggml_barrier(params->threadpool);
++        return;
++    }
++
++
+ #if GGML_USE_LLAMAFILE
+     if (src1->type != vec_dot_type) {
+         const void* wdata = (src1->type == vec_dot_type) ? src1->data : params->wdata;

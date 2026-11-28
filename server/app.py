@@ -126,6 +126,15 @@ def create_app(command_fifo):
     def index():
         return bottle.static_file('index.html', root=WEB_ROOT)
 
+    @app.get('/llm')
+    @app.get('/llm/')
+    def model_console():
+        return bottle.static_file('llm.html', root=WEB_ROOT)
+
+    @app.get('/<asset:re:llm[.](?:css|js)>')
+    def model_asset(asset):
+        return bottle.static_file(asset, root=WEB_ROOT)
+
     @app.get('/main.js')
     def javascript():
         return bottle.static_file('main.js', root=WEB_ROOT)

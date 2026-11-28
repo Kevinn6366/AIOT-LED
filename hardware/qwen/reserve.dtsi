@@ -1,0 +1,11 @@
+/ {
+    reserved-memory {
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges;
+        qwen@1e000000 {
+            reg = <0x1e000000 0x00100000>;
+            no-map;
+        };
+    };
+};

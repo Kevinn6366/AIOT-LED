@@ -4,6 +4,7 @@ set project_dir $root/build/rgb-vivado
 if {[info exists ::env(AIOT_GPT_RTL)]} {
     set project_dir $root/build/gpt-panel
 }
+if {[info exists ::env(AIOT_QWEN_IP)]} {set project_dir $root/build/qwen-panel}
 create_project panel $project_dir -part xc7z020clg400-1
 set_property board_part [lindex [get_board_parts digilentinc.com:zybo-z7-20:part0:*] end] [current_project]
 create_bd_design panel_io
@@ -90,6 +91,21 @@ if {[info exists ::env(AIOT_GPT_RTL)]} {
     if {[llength $mapped] != 1} {error "Missing language model address segment"}
     set_property offset 0x43C00000 $mapped
 }
+if {[info exists ::env(AIOT_QWEN_IP)]} {
+    set_property ip_repo_paths [file normalize $::env(AIOT_QWEN_IP)] [current_project]
+    update_ip_catalog
+    set_property CONFIG.PCW_USE_S_AXI_HP0 1 [get_bd_cells ps]
+    create_bd_cell -type ip -vlnv xilinx.com:hls:qwen_qproj:1.0 qproj
+    apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config {Master "/ps/M_AXI_GP0" Slave "/qproj/s_axi_control" Clk_master "Auto" Clk_slave "Auto" Clk_xbar "Auto"} [get_bd_intf_pins qproj/s_axi_control]
+    set_property offset 0x43C10000 [get_bd_addr_segs -of_objects [get_bd_addr_spaces ps/Data] -filter {NAME =~ *qproj*}]
+    apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config {Master "/qproj/m_axi_hp" Slave "/ps/S_AXI_HP0" Clk_master "Auto" Clk_slave "Auto" Clk_xbar "Auto"} [get_bd_intf_pins ps/S_AXI_HP0]
+    ip qclock c_counter_binary {CONFIG.Output_Width 32 CONFIG.CE false}
+    wire ps/FCLK_CLK0 qclock/CLK
+    ip qcycles axi_gpio {CONFIG.C_GPIO_WIDTH 32 CONFIG.C_ALL_INPUTS 1}
+    wire qclock/Q qcycles/gpio_io_i
+    apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config {Master "/ps/M_AXI_GP0" Slave "/qcycles/S_AXI" Clk_master "Auto" Clk_slave "Auto" Clk_xbar "Auto"} [get_bd_intf_pins qcycles/S_AXI]
+    set_property offset 0x41220000 [get_bd_addr_segs -of_objects [get_bd_addr_spaces ps/Data] -filter {NAME =~ *qcycles*}]
+}
 regenerate_bd_layout
 validate_bd_design
 save_bd_design
@@ -105,6 +121,7 @@ wait_on_run impl_1
 if {[get_property PROGRESS [get_runs impl_1]] ne "100%"} {error "Implementation failed"}
 set out $root/build/artifacts
 if {[info exists ::env(AIOT_GPT_RTL)]} {set out $root/build/gpt-artifacts}
+if {[info exists ::env(AIOT_QWEN_IP)]} {set out $root/build/qwen-artifacts}
 file mkdir $out
 set run [get_property DIRECTORY [get_runs impl_1]]
 file copy -force $run/panel_io_wrapper.bit $out/panel_io_wrapper.bit
