@@ -24,3 +24,5 @@ vivado_pid*.str
 !/build/artifacts/llama-server.elf
 !/build/artifacts/qwen-panel.bit
 !/build/artifacts/qwen-panel.hdf
+/usage_statistics_webtalk.html
+/usage_statistics_webtalk.xml
