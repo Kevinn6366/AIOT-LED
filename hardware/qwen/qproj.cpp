@@ -58,15 +58,15 @@ static float sum8(const float values[8]) {
     return sum;
 }
 
-static void quant_rows(hls::stream<WeightBlock>& stream, const Word x[2][760],
-                       Word result[64], unsigned blocks, unsigned rows, bool wide) {
+static void quant_rows(hls::stream<WeightBlock>& stream, const Word x[4][760],
+                       Word result[128], unsigned blocks, unsigned rows, bool wide, bool four) {
     for (unsigned row=0; row<rows; ++row) {
-        float acc[2][8]={};
+        float acc[4][8]={};
 #pragma HLS ARRAY_PARTITION variable=acc complete dim=0
         for (unsigned b=0; b<blocks; ++b) {
 #pragma HLS PIPELINE II=1
             WeightBlock w=stream.read();
-            for (int c=0; c<2; ++c) {
+            for (int c=0; c<4; ++c) {
 #pragma HLS UNROLL
                 int dot=0;
                 for (unsigned p=0; p<4; ++p) {
@@ -85,12 +85,14 @@ static void quant_rows(hls::stream<WeightBlock>& stream, const Word x[2][760],
                 acc[c][b%8]+=dot*(unpack(w.scale)*unpack(x[c][5*b+4]));
             }
         }
-        result[row]=((Word)pack(sum8(acc[1]))<<32)|pack(sum8(acc[0]));
+        unsigned dst=four ? 2*row : row;
+        if (four) result[dst+1]=((Word)pack(sum8(acc[3]))<<32)|pack(sum8(acc[2]));
+        result[dst]=((Word)pack(sum8(acc[1]))<<32)|pack(sum8(acc[0]));
     }
 }
 
-static void quant_tile(const Word *weights, const Word x[2][760], Word result[64],
-                       unsigned blocks, unsigned rows, bool wide) {
+static void quant_tile(const Word *weights, const Word x[4][760], Word result[128],
+                       unsigned blocks, unsigned rows, bool wide, bool four) {
 #pragma HLS DATAFLOW
     hls::stream<Word> words;
     hls::stream<WeightBlock> packed;
@@ -99,11 +101,11 @@ static void quant_tile(const Word *weights, const Word x[2][760], Word result[64
     unsigned count=rows*blocks*(wide ? 5 : 3);
     fetch(weights,count,words);
     assemble(words,packed,count,wide);
-    quant_rows(packed,x,result,blocks,rows,wide);
+    quant_rows(packed,x,result,blocks,rows,wide,four);
 }
 
-static void attention_tile(const Word *weights, const Word x[2][760],
-                           Word result[64], unsigned stride, unsigned rows) {
+static void attention_tile(const Word *weights, const Word x[4][760],
+                           Word result[128], unsigned stride, unsigned rows) {
     Word w[256];
     for (unsigned r=0; r<rows; ++r) {
         memcpy(w,weights+r*stride,stride*sizeof(Word));
@@ -134,28 +136,29 @@ void qwen_qproj(Word *mem, unsigned weight, unsigned input, unsigned output,
 #pragma HLS INTERFACE s_axilite port=rows bundle=control offset=0x30
 #pragma HLS INTERFACE s_axilite port=cols bundle=control offset=0x38
 #pragma HLS INTERFACE s_axilite port=format bundle=control offset=0x40
-    if (!width || width>4864 || !rows || rows>151936 || !cols || cols>2 || format>2) return;
+    if (!width || width>4864 || !rows || rows>151936 || !cols || cols>4 || (format==2 && cols>2) || format>2) return;
     const unsigned blocks=width/32;
     const unsigned stride=format==0 ? blocks*3 : format==1 ? blocks*5 : width/2;
     const unsigned xs=format==2 ? width/2 : blocks*5;
-    Word x[2][760];
+    Word x[4][760];
 #pragma HLS ARRAY_PARTITION variable=x complete dim=1
 #pragma HLS ARRAY_PARTITION variable=x cyclic factor=5 dim=2
     if (!stride || stride>760 || xs>760 || (format==2 && stride>256)) return;
-    for (unsigned c=0;c<2;++c) {
-        // Duplicate column zero for a one-column tail. Both physical lanes are defined.
+    bool four=cols>2;
+    for (unsigned c=0;c<(format==2 ? 2u : 4u);++c) {
+        // Fill unused lanes from column zero so partial batches have defined inputs.
         unsigned base=input+(c<cols ? c*xs : 0);
         for (unsigned i=0;i<xs;++i) {
 #pragma HLS PIPELINE II=1
             x[c][i]=mem[base+i];
         }
     }
-    Word result[64];
+    Word result[128];
     for (unsigned first=0;first<rows;first+=64) {
         unsigned n=rows-first<64 ? rows-first : 64;
         const Word *tile=mem+weight+first*stride;
         if (format==2) attention_tile(tile,x,result,stride,n);
-        else quant_tile(tile,x,result,blocks,n,format==1);
-        memcpy(mem+output+first,result,n*sizeof(Word));
+        else quant_tile(tile,x,result,blocks,n,format==1,four);
+        memcpy(mem+output+first*(four ? 2 : 1),result,n*(four ? 2 : 1)*sizeof(Word));
     }
 }

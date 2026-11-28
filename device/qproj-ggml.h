@@ -135,8 +135,10 @@ static void qall_matmul(const struct ggml_tensor *w, const void *x,
                 for (int k=0;k<width;++k) qmem[QDYNAMIC/4+r*width+k]=qbits(GGML_FP16_TO_FP32(row[k]));
             }
         }
-        for (int c=0;c<columns;c+=2) {
-            const int group=columns-c<2 ? columns-c : 2;
+        const int batch=fp ? 2 : 4;
+        for (int c=0;c<columns;c+=batch) {
+            const int group=columns-c<batch ? columns-c : batch;
+            const int pitch=group>2 ? 4 : 2;
             for (int j=0;j<group;++j) {
                 const unsigned char *v=(const unsigned char *)x+h*xhead+(c+j)*xs;
                 if (fp) {
@@ -148,7 +150,7 @@ static void qall_matmul(const struct ggml_tensor *w, const void *x,
             for (int j=0;j<group;++j) {
                 float *y=(float *)((char *)out->data+h*out->nb[2]+(c+j)*out->nb[1]);
                 for (int r=0;r<rows;++r) {
-                    uint32_t word=qmem[QOUTPUT/4+r*2+j];
+                    uint32_t word=qmem[QOUTPUT/4+r*pitch+j];
                     memcpy(y+r,&word,4);
                     if (verify && (r<8 || r==rows-1)) {
                         float ref;
