@@ -8,10 +8,8 @@ union FloatWord { float f; uint32_t u; };
 static float unpack(uint32_t bits) { FloatWord v; v.u=bits; return v.f; }
 static uint32_t pack(float v) { FloatWord b; b.f=v; return b.u; }
 
-struct WeightBlock {
-    Word payload[4];
-    uint32_t scale;
-};
+typedef ap_uint<288> WeightBlock;
+typedef ap_uint<128> PartialSums;
 
 static void fetch(const Word *weights, unsigned count, hls::stream<Word>& words) {
     for (unsigned i=0; i<count; ++i) {
@@ -50,11 +48,11 @@ static void assemble(hls::stream<Word>& words, hls::stream<WeightBlock>& blocks,
             header=false;
         } else if (part==(wide ? 3u : 1u)) {
             WeightBlock w;
-            w.payload[0]=previous[0];
-            w.payload[1]=wide ? previous[1] : word;
-            w.payload[2]=previous[2];
-            w.payload[3]=word;
-            w.scale=scale_bits(scales);
+            w.range(63,0)=previous[0];
+            w.range(127,64)=wide ? previous[1] : word;
+            w.range(191,128)=previous[2];
+            w.range(255,192)=word;
+            w.range(287,256)=scale_bits(scales);
             blocks.write(w);
             scales>>=16;
             header=block==3;
@@ -83,52 +81,98 @@ static float sum8(const float values[8]) {
     return sum;
 }
 
-static void quant_rows(hls::stream<WeightBlock>& stream, const Word x[4][760],
-                       Word result[128], unsigned blocks, unsigned rows, bool wide, bool four) {
-    for (unsigned row=0; row<rows; ++row) {
-        float acc[4][8]={};
+// For one/two columns, lanes 2 and 3 work on a second row from HP2.
+// For three/four columns, both lane pairs share the HP0 row.
+static void quant_rows(hls::stream<WeightBlock>& first, hls::stream<WeightBlock>& second,
+                       const Word x[4][760], hls::stream<PartialSums>& tails,
+                       unsigned blocks, unsigned rows, bool wide, bool split) {
+    float acc[4][8];
 #pragma HLS ARRAY_PARTITION variable=acc complete dim=1
 #pragma HLS RESOURCE variable=acc core=RAM_2P_LUTRAM
-        for (unsigned b=0; b<blocks; ++b) {
+    unsigned b=0;
+    const unsigned count=blocks*rows;
+    for (unsigned step=0; step<count; ++step) {
 #pragma HLS PIPELINE II=1
-            #pragma HLS DEPENDENCE variable=acc inter distance=8 true
-            WeightBlock w=stream.read();
-            for (int c=0; c<4; ++c) {
+#pragma HLS DEPENDENCE variable=acc inter distance=8 true
+        WeightBlock left=first.read();
+        WeightBlock right=split ? second.read() : left;
+        PartialSums partial;
+        for (unsigned c=0;c<4;++c) {
 #pragma HLS UNROLL
-                int dot=0;
-                for (unsigned p=0; p<4; ++p) {
+            WeightBlock w=c<2 ? left : right;
+            int dot=0;
+            for (unsigned p=0;p<4;++p) {
 #pragma HLS UNROLL
-                    ap_uint<64> payload=w.payload[wide ? p : p%2];
-                    ap_uint<64> activation=x[c][5*b+p];
-                    for (unsigned k=0; k<8; ++k) {
+                unsigned q=wide ? p : p%2;
+                ap_uint<64> payload=w.range(64*q+63,64*q);
+                ap_uint<64> activation=x[c][5*b+p];
+                for (unsigned k=0;k<8;++k) {
 #pragma HLS UNROLL
-                        ap_uint<8> raw=payload.range(8*k+7,8*k);
-                        ap_int<8> v=raw;
-                        if (!wide) v=(int)(p<2 ? raw.range(3,0).to_uint() : raw.range(7,4).to_uint())-8;
-                        ap_int<8> a=activation.range(8*k+7,8*k);
-                        dot+=(k>=6 ? lut_product(v,a) : (int)(v*a));
-                    }
+                    ap_uint<8> raw=payload.range(8*k+7,8*k);
+                    ap_int<8> v=raw;
+                    if (!wide) v=(int)(p<2 ? raw.range(3,0).to_uint() : raw.range(7,4).to_uint())-8;
+                    ap_int<8> a=activation.range(8*k+7,8*k);
+                    dot+=(k>=6 ? lut_product(v,a) : (int)(v*a));
                 }
-                acc[c][b%8]+=dot*(unpack(w.scale)*unpack(x[c][5*b+4]));
             }
+            float last=b<8 ? 0.f : acc[c][b%8];
+            float value=last+dot*(unpack(w.range(287,256))*unpack(x[c][5*b+4]));
+            acc[c][b%8]=value;
+            partial.range(32*c+31,32*c)=pack(value);
         }
-        unsigned dst=four ? 2*row : row;
-        if (four) result[dst+1]=((Word)pack(sum8(acc[3]))<<32)|pack(sum8(acc[2]));
-        result[dst]=((Word)pack(sum8(acc[1]))<<32)|pack(sum8(acc[0]));
+        if (b+8>=blocks) tails.write(partial);
+        b=(b+1==blocks) ? 0 : b+1;
     }
 }
 
-static void quant_tile(const Word *weights, const Word x[4][760], Word result[128],
-                       unsigned blocks, unsigned rows, bool wide, bool four) {
+static void finish_rows(hls::stream<PartialSums>& tails, Word result[128],
+                        unsigned blocks, unsigned rows, bool four, bool split) {
+    for (unsigned row=0;row<rows;++row) {
+        float lane[4][8]={};
+#pragma HLS ARRAY_PARTITION variable=lane complete dim=1
+        unsigned count=blocks<8 ? blocks : 8;
+        for (unsigned k=0;k<count;++k) {
+#pragma HLS PIPELINE II=1
+            PartialSums sums=tails.read();
+            for (int c=0;c<4;++c) {
+#pragma HLS UNROLL
+                lane[c][(blocks-count+k)%8]=unpack(sums.range(32*c+31,32*c));
+            }
+        }
+        float sums[4]={};
+#pragma HLS ARRAY_PARTITION variable=sums complete
+        for (int k=0;k<8;++k) {
+            for (int c=0;c<4;++c) {
+#pragma HLS UNROLL
+                sums[c]+=lane[c][k];
+            }
+        }
+        unsigned dst=four ? 2*row : row;
+        result[dst]=((Word)pack(sums[1])<<32)|pack(sums[0]);
+        if (four || split) result[four ? dst+1 : dst+rows]=((Word)pack(sums[3])<<32)|pack(sums[2]);
+    }
+}
+
+static void quant_tile(const Word *weights, const Word *other, const Word x[4][760],
+                       Word result[128], unsigned blocks, unsigned groups, bool wide,
+                       bool four, bool split) {
 #pragma HLS DATAFLOW
-    hls::stream<Word> words;
-    hls::stream<WeightBlock> packed;
-#pragma HLS STREAM variable=words depth=64
-#pragma HLS STREAM variable=packed depth=32
-    unsigned count=rows*(blocks/4)*(wide ? 17 : 9);
-    fetch(weights,count,words);
-    assemble(words,packed,count,wide);
-    quant_rows(packed,x,result,blocks,rows,wide,four);
+    hls::stream<Word> words0,words2;
+    hls::stream<WeightBlock> packed0,packed2;
+    hls::stream<PartialSums> tails;
+#pragma HLS STREAM variable=words0 depth=64
+#pragma HLS STREAM variable=words2 depth=64
+#pragma HLS STREAM variable=packed0 depth=16
+#pragma HLS STREAM variable=packed2 depth=16
+#pragma HLS STREAM variable=tails depth=32
+    unsigned count=groups*(blocks/4)*(wide ? 17 : 9);
+    unsigned second=split ? count : 0;
+    fetch(weights,count,words0);
+    fetch(other,second,words2);
+    assemble(words0,packed0,count,wide);
+    assemble(words2,packed2,second,wide);
+    quant_rows(packed0,packed2,x,tails,blocks,groups,wide,split);
+    finish_rows(tails,result,blocks,groups,four,split);
 }
 
 static void attention_tile(const Word *weights, const Word x[4][760],
@@ -152,9 +196,10 @@ static void attention_tile(const Word *weights, const Word x[4][760],
 // Addresses are physical 64-bit word indices in the reserved HP0 window.
 // Formats 0 and 1 use Q4_0 or Q8_0 weights and Q8_0 activations.
 // Format 2 consumes packed pairs of FP32 values for attention score/value products.
-void qwen_qproj(Word *mem, unsigned weight, unsigned input, unsigned output,
+void qwen_qproj(Word *mem, const Word *mem2, unsigned weight, unsigned input, unsigned output,
                 unsigned width, unsigned rows, unsigned cols, unsigned format) {
 #pragma HLS INTERFACE m_axi port=mem offset=off bundle=hp depth=134217728 max_read_burst_length=128
+#pragma HLS INTERFACE m_axi port=mem2 offset=off bundle=hp2 depth=134217728 max_read_burst_length=128
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 #pragma HLS INTERFACE s_axilite port=weight bundle=control offset=0x10
 #pragma HLS INTERFACE s_axilite port=input bundle=control offset=0x18
@@ -176,13 +221,12 @@ void qwen_qproj(Word *mem, unsigned weight, unsigned input, unsigned output,
 #endif
     if ((format!=2 && width%128) || !stride || stride>760 || xs>760 || (format==2 && stride>256)) return;
     bool four=cols>2;
-    for (unsigned c=0;c<(format==2 ? 2u : 4u);++c) {
-        // Fill unused lanes from column zero so partial batches have defined inputs.
-        unsigned base=input+c*xs;
-        if (c>=cols) continue;
+    for (unsigned c=0;c<cols;++c) {
         for (unsigned i=0;i<xs;++i) {
 #pragma HLS PIPELINE II=1
-            x[c][i]=mem[base+i];
+            Word v=mem[input+c*xs+i];
+            x[c][i]=v;
+            if (!four && c<2) x[c+2][i]=v;
         }
     }
     Word result[128];
@@ -190,7 +234,11 @@ void qwen_qproj(Word *mem, unsigned weight, unsigned input, unsigned output,
         unsigned n=rows-first<64 ? rows-first : 64;
         const Word *tile=mem+weight+first*stride;
         if (format==2) attention_tile(tile,x,result,stride,n);
-        else quant_tile(tile,x,result,blocks,n,format==1,four);
+        else {
+            bool split=!four && !(n&1);
+            unsigned groups=split ? n/2 : n;
+            quant_tile(tile,mem2+weight+(first+(split ? groups : 0))*stride,x,result,blocks,groups,format==1,four,split);
+        }
         memcpy(mem+output+first*(four ? 2 : 1),result,n*(four ? 2 : 1)*sizeof(Word));
     }
 }

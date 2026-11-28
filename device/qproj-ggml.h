@@ -151,21 +151,31 @@ static void qall_matmul(const struct ggml_tensor *w, const void *x,
     GGML_ASSERT(kind==9 || (layer>=0 && layer<QLAYERS));
     unsigned offset=fp ? QDYNAMIC : qresident(w,wide);
     bool verify=qkind[kind]==0;
-    for (int h=0; h<heads; ++h) {
-        int wh=h/(heads/w->ne[2]);
+    // All query heads in a GQA group have the same K/V matrix. Fill both
+    // physical attention lanes even during single-token decode.
+    const int queries_per_weight=heads/w->ne[2];
+    const int vectors=queries_per_weight*columns;
+    for (int wh=0; wh<w->ne[2]; ++wh) {
         const char *src=(const char *)w->data+wh*w->nb[2];
-        if (fp && h%(heads/w->ne[2])==0) {
+        if (fp) {
             for (int r=0;r<rows;++r) {
                 const ggml_fp16_t *row=(const ggml_fp16_t *)(src+r*w->nb[1]);
                 for (int k=0;k<width;++k) qmem[QDYNAMIC/4+r*width+k]=qbits(GGML_FP16_TO_FP32(row[k]));
             }
         }
         const int batch=fp ? 2 : 4;
-        for (int c=0;c<columns;c+=batch) {
-            const int group=columns-c<batch ? columns-c : batch;
+        for (int first=0;first<vectors;first+=batch) {
+            const int group=vectors-first<batch ? vectors-first : batch;
+            const unsigned char *input[4];
+            float *output[4];
             const int pitch=group>2 ? 4 : 2;
             for (int j=0;j<group;++j) {
-                const unsigned char *v=(const unsigned char *)x+h*xhead+(c+j)*xs;
+                int index=first+j;
+                int h=wh*queries_per_weight+index/columns;
+                int c=index%columns;
+                const unsigned char *v=(const unsigned char *)x+h*xhead+c*xs;
+                input[j]=v;
+                output[j]=(float *)((char *)out->data+h*out->nb[2]+c*out->nb[1]);
                 if (fp) {
                     const ggml_fp16_t *half=(const ggml_fp16_t *)v;
                     for (int k=0;k<width;++k) qmem[QINPUT/4+j*width+k]=qbits(GGML_FP16_TO_FP32(half[k]));
@@ -173,13 +183,13 @@ static void qall_matmul(const struct ggml_tensor *w, const void *x,
             }
             qlaunch(offset,width,rows,group,fp ? 2 : wide ? 1 : 0,kind);
             for (int j=0;j<group;++j) {
-                float *y=(float *)((char *)out->data+h*out->nb[2]+(c+j)*out->nb[1]);
+                float *y=output[j];
                 for (int r=0;r<rows;++r) {
                     uint32_t word=qmem[QOUTPUT/4+r*pitch+j];
                     memcpy(y+r,&word,4);
                     if (verify && (r<8 || r==rows-1)) {
                         float ref;
-                        const char *v=(const char *)x+h*xhead+(c+j)*xs;
+                        const void *v=input[j];
                         type_traits[w->type].vec_dot(width,&ref,0,src+r*w->nb[1],0,v,0,1);
                         GGML_ASSERT(isfinite(y[r]) && fabsf(ref-y[r])<0.001f*(1+fabsf(ref)));
                     }

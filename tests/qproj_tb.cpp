@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <vector>
 
-void qwen_qproj(uint64_t *, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned);
+void qwen_qproj(uint64_t *, const uint64_t *, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned);
 union FloatWord { uint32_t u; float f; };
 static uint32_t bits(float value) {FloatWord v; v.f=value; return v.u;}
 static float value(uint32_t bits) {FloatWord v; v.u=bits; return v.f;}
@@ -37,7 +37,7 @@ static bool run(unsigned width, unsigned rows, unsigned cols, unsigned fmt) {
             mem[input+c*xs+(k/32)*5+4]=bits(((k/32)%3+1)/16.f);
         }
     }
-    qwen_qproj(mem.data(),0,input,output,width,rows,cols,fmt);
+    qwen_qproj(mem.data(),mem.data(),0,input,output,width,rows,cols,fmt);
     for (unsigned r=0;r<rows;++r) for (unsigned c=0;c<cols;++c) {
         double ref=0;
         for (unsigned k=0;k<width;++k) {
@@ -67,7 +67,7 @@ static bool half_scales() {
                             -std::ldexp(1.f,-24),1.f};
     for (unsigned b=0;b<4;++b) {
         mem[input+b*5]=1;
-        qwen_qproj(mem.data(),0,input,output,128,1,1,0);
+        qwen_qproj(mem.data(),mem.data(),0,input,output,128,1,1,0);
         if (value(mem[output])!=expected[b]) return false;
         mem[input+b*5]=0;
     }

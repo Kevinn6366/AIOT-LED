@@ -1,0 +1,4 @@
+all:
+{
+    qwen-panel.bit
+}

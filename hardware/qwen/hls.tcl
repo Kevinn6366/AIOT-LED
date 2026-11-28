@@ -1,5 +1,5 @@
 cd build
-open_project qwen_decode_hls
+open_project qwen_dual_hls
 set_top qwen_qproj
 add_files ../hardware/qwen/qproj.cpp
 open_solution sol

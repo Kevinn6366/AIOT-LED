@@ -48,3 +48,11 @@
 固件 `493e9570ad55` 的矩阵核和 HP0 运行在 125 MHz，GP0 控制、灯控、ZyboGPT 和测量周期用的计数器仍运行在 50 MHz。每四个 Q4_0 或 Q8_0 块以一个 64 位字存放原始 FP16 缩放值。逐 token 读取的权重由 438,538,240 降至 345,920,512 字节。测试覆盖四个缩放值的位置、正负 FP16 次正规数和跨分块输出。Vivado 实现使用 29,782 个 LUT、63 个 BRAM Tile、170 个 DSP，WNS 为 0.212 ns，WHS 为 0.014 ns。
 
 同题两轮，单端口 PL 首字为 13.16、13.18 秒，生成速度为 0.926、0.928 token/s；纯 PS 为 24.71、24.63 秒及 1.041、1.041 token/s。虽然显著快于四列旧固件，生成速度仍低于纯 PS。最后一个解码图中 FFN gate 和 up 的调用窗口分别约 200 毫秒，注意力分数及加权求和各约 57 毫秒。原始数据的 `pl_op_cycles` 是整题按运算分类的 50 MHz 参考周期，`pl_last_graph_cycles` 是最后一个含输出头的图。窗口计入核执行、传输以及 PS 等待完成的时间。[四次网页记录](qwen-compact-comparison.json)
+
+## 双端口并行与注意力合并
+
+三到四列提示词共享一行权重。单列或双列时，把量化输出行平分给 HP0 和 HP2，两个读引擎各自连续取数，左右两对乘加通路各算一组行。这样同时生成两个不同行的结果。PS 在同一个 KV 组内按向量填满两个浮点注意力通路。板上只有一个 Qwen 请求在运行。HP0/HP1 和 HP2/HP3 分别连接两个 DDR 控制器端口。[AMD DDR 控制器连接说明](https://docs.amd.com/r/en-US/ug1145-sdk-system-performance/Evaluating-DDR-Controller-Settings)
+
+本次 A 槽固件 `bdf7ca62b59d` 的 Qwen 时钟为 110 MHz，使用 33,832 个 LUT、72 个 BRAM Tile 和 215 个 DSP。125 MHz 初次布线未满足建立时间。用对应 110 MHz Clocking Wizard 的两项 MMCM 参数重用同一布线，并核对生成时钟、保持时间、硬件描述中的 BIT。最终 WNS 0.467 ns、WHS 0.010 ns。重建此物理变体时，用 `AIOT_QWEN_ROUTE_125=1` 运行本提交的 BD 脚本保留原布线，然后清除此变量，生成 110 MHz 工程的硬件描述，再在 Vivado 中执行 `hardware/qwen/reclock-dual.tcl`。只导出通过时序的位流。
+
+两轮 PL 首字分别为 9.82、9.83 秒；速度为 1.864、1.863 token/s。两轮 PS 首字均为 24.82 秒；速度为 1.040、1.040 token/s。回答一致，PL 的 24 层和十类运算都有回读。最后一个解码图的词表输出由约 258 毫秒降到 96 毫秒，FFN gate、up 分别由约 200 毫秒降到 73 毫秒。[双端口原始网页记录](qwen-dual-comparison.json)
