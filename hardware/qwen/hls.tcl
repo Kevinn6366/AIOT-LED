@@ -1,5 +1,5 @@
 cd build
-open_project qwen_fourhp_hls
+open_project qwen_flow_hls
 set_top qwen_qproj
 add_files ../hardware/qwen/qproj.cpp
 open_solution sol

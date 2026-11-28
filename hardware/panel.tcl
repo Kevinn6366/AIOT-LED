@@ -4,7 +4,7 @@ set project_dir $root/build/rgb-vivado
 if {[info exists ::env(AIOT_GPT_RTL)]} {
     set project_dir $root/build/gpt-panel
 }
-if {[info exists ::env(AIOT_QWEN_IP)]} {set project_dir $root/build/qwen-fourhp-panel}
+if {[info exists ::env(AIOT_QWEN_IP)]} {set project_dir $root/build/qwen-flow-panel}
 create_project panel $project_dir -part xc7z020clg400-1
 set_property board_part [lindex [get_board_parts digilentinc.com:zybo-z7-20:part0:*] end] [current_project]
 create_bd_design panel_io
@@ -97,7 +97,7 @@ if {[info exists ::env(AIOT_QWEN_IP)]} {
     set_property -dict {CONFIG.PCW_USE_S_AXI_HP0 1 CONFIG.PCW_USE_S_AXI_HP2 1 CONFIG.PCW_USE_S_AXI_HP1 1 CONFIG.PCW_USE_S_AXI_HP3 1} [get_bd_cells ps]
     create_bd_cell -type ip -vlnv xilinx.com:hls:qwen_qproj:1.0 qproj
     # Leave the legacy panel, GPT, PS GP0 and telemetry on FCLK0.
-    # Only the matrix accelerator and its HP0 memory port use the faster clock.
+    # The matrix accelerator and its four HP memory ports use the faster clock.
     ip qclk clk_wiz {CONFIG.PRIM_IN_FREQ 50.000 CONFIG.CLKOUT1_REQUESTED_OUT_FREQ 110.000 CONFIG.USE_RESET false}
     wire ps/FCLK_CLK0 qclk/clk_in1
     ip qreset proc_sys_reset {CONFIG.C_EXT_RESET_HIGH 0}
@@ -150,7 +150,7 @@ wait_on_run impl_1
 if {[get_property PROGRESS [get_runs impl_1]] ne "100%"} {error "Implementation failed"}
 set out $root/build/artifacts
 if {[info exists ::env(AIOT_GPT_RTL)]} {set out $root/build/gpt-artifacts}
-if {[info exists ::env(AIOT_QWEN_IP)]} {set out $root/build/qwen-fourhp-artifacts}
+if {[info exists ::env(AIOT_QWEN_IP)]} {set out $root/build/qwen-flow-artifacts}
 file mkdir $out
 set run [get_property DIRECTORY [get_runs impl_1]]
 file copy -force $run/panel_io_wrapper.bit $out/panel_io_wrapper.bit

@@ -71,16 +71,6 @@ static int lut_product(ap_int<8> w, ap_int<8> a) {
     return product;
 }
 
-static float sum8(const float values[8]) {
-#pragma HLS INLINE
-    float sum=0;
-    for (int k=0; k<8; ++k) {
-#pragma HLS UNROLL
-        sum+=values[k];
-    }
-    return sum;
-}
-
 // A single decode vector uses all four lanes for four independent output rows.
 // Two columns use row pairs from HP0 and HP2.
 // For three/four columns, both lane pairs share the HP0 row.
@@ -116,7 +106,7 @@ static void quant_rows(hls::stream<WeightBlock>& first, hls::stream<WeightBlock>
                     ap_int<8> v=raw;
                     if (!wide) v=(int)(p<2 ? raw.range(3,0).to_uint() : raw.range(7,4).to_uint())-8;
                     ap_int<8> a=activation.range(8*k+7,8*k);
-                    dot+=(k>=6 ? lut_product(v,a) : (int)(v*a));
+                    dot+=((k>=6 || (k==5 && c>=2)) ? lut_product(v,a) : (int)(v*a));
                 }
             }
             float last=b<8 ? 0.f : acc[c][b%8];
@@ -132,7 +122,7 @@ static void quant_rows(hls::stream<WeightBlock>& first, hls::stream<WeightBlock>
 static void finish_rows(hls::stream<PartialSums>& tails, Word result[128],
                         unsigned blocks, unsigned rows, bool four, bool split, bool quad) {
     for (unsigned row=0;row<rows;++row) {
-        float lane[4][8]={};
+        float lane[4][8];
 #pragma HLS ARRAY_PARTITION variable=lane complete dim=1
         unsigned count=blocks<8 ? blocks : 8;
         for (unsigned k=0;k<count;++k) {
@@ -146,9 +136,10 @@ static void finish_rows(hls::stream<PartialSums>& tails, Word result[128],
         float sums[4]={};
 #pragma HLS ARRAY_PARTITION variable=sums complete
         for (int k=0;k<8;++k) {
+#pragma HLS PIPELINE II=1
             for (int c=0;c<4;++c) {
 #pragma HLS UNROLL
-                sums[c]+=lane[c][k];
+                if ((unsigned)k<count) sums[c]+=lane[c][k];
             }
         }
         if (quad) {
@@ -193,22 +184,43 @@ static void quant_tile(const Word *weights, const Word *other, const Word *port1
     finish_rows(tails,result,blocks,groups,four,split,quad);
 }
 
+// Stream all rows of the attention tile. The two active query heads share each
+// read and keep the same pairwise FP32 product order used by the original core.
+static void attention_rows(hls::stream<Word>& words, const Word x[4][760],
+                           hls::stream<PartialSums>& tails, unsigned stride, unsigned rows) {
+    float acc[2][8];
+#pragma HLS ARRAY_PARTITION variable=acc complete dim=1
+#pragma HLS RESOURCE variable=acc core=RAM_2P_LUTRAM
+#pragma HLS ALLOCATION instances=fmul limit=2 operation
+    unsigned j=0;
+    for (unsigned i=0;i<rows*stride;++i) {
+#pragma HLS PIPELINE II=2
+#pragma HLS DEPENDENCE variable=acc inter distance=8 true
+        Word w=words.read();
+        PartialSums partial=0;
+        for (unsigned c=0;c<2;++c) {
+#pragma HLS UNROLL
+            Word a=x[c][j];
+            float term=unpack(w)*unpack(a)+unpack(w>>32)*unpack(a>>32);
+            float value=(j<8 ? 0.f : acc[c][j%8])+term;
+            acc[c][j%8]=value;
+            partial.range(32*c+31,32*c)=pack(value);
+        }
+        if (j+8>=stride) tails.write(partial);
+        j=j+1==stride ? 0 : j+1;
+    }
+}
+
 static void attention_tile(const Word *weights, const Word x[4][760],
                            Word result[128], unsigned stride, unsigned rows) {
-    Word w[256];
-    for (unsigned r=0; r<rows; ++r) {
-        memcpy(w,weights+r*stride,stride*sizeof(Word));
-        float acc[2][8]={};
-#pragma HLS ARRAY_PARTITION variable=acc complete dim=0
-        for (unsigned j=0; j<stride; ++j) {
-#pragma HLS PIPELINE II=1
-            for (int c=0; c<2; ++c) {
-#pragma HLS UNROLL
-                acc[c][j%8]+=unpack(w[j])*unpack(x[c][j])+unpack(w[j]>>32)*unpack(x[c][j]>>32);
-            }
-        }
-        result[r]=((Word)pack(sum8(acc[1]))<<32)|pack(sum8(acc[0]));
-    }
+#pragma HLS DATAFLOW
+    hls::stream<Word> words;
+    hls::stream<PartialSums> tails;
+#pragma HLS STREAM variable=words depth=32
+#pragma HLS STREAM variable=tails depth=32
+    fetch(weights,rows*stride,words);
+    attention_rows(words,x,tails,stride,rows);
+    finish_rows(tails,result,stride,rows,false,false,false);
 }
 
 // Addresses are physical 64-bit word indices in the reserved HP0 window.

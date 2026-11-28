@@ -20,7 +20,7 @@ PS 负责分词、嵌入查表、归一化、RoPE、Softmax、逐元素运算、
 ## 构建与复测
 
 1. 在映射到项目的 R 盘根目录用 Vivado HLS 2019.1 执行 `vivado_hls -f hardware/qwen/sim.tcl`。仿真覆盖 Q4、Q8、浮点点积、单列至四列、行尾和 4864 维输入。运行 `hardware/qwen/build-ip.ps1` 导出 IP。
-2. 在 Vivado Tcl Console 设置环境变量 `AIOT_GPT_RTL=R:/build/zybogpt/hw/gen` 和 `AIOT_QWEN_IP=R:/build/qwen_fourhp_hls/sol/impl/ip`，执行 `source hardware/panel.tcl`。工程位于 `build/qwen-fourhp-panel`，位流及 HDF 位于 `build/qwen-fourhp-artifacts`。
+2. 在 Vivado Tcl Console 设置环境变量 `AIOT_GPT_RTL=R:/build/zybogpt/hw/gen` 和 `AIOT_QWEN_IP=R:/build/qwen_flow_hls/sol/impl/ip`，执行 `source hardware/panel.tcl`。工程位于 `build/qwen-flow-panel`，位流及 HDF 位于 `build/qwen-flow-artifacts`。
 3. 执行 `device/build-qwen.ps1` 编译 ARM ELF。将通过时序的 BIT、HDF 导出为 `build/artifacts/qwen-panel.bit`、`qwen-panel.hdf`。在此目录运行 `bootgen -arch zynq -image ../../hardware/qwen/network.bif -process_bitstream bin -w`。按项目 SD 流程打包，构建 FIT 时设置 `AIOT_QPROJ=1`、`AIOT_BIT_BIN=build/artifacts/qwen-panel.bit.bin`。
 4. 签名写入备用槽并重启。在装有 Playwright 和 Edge 的电脑上运行 `python tests/compare_qwen.py`。脚本先预热权重，再交替测试两个后端。切换后端会清除旧 KV，核对各轮提示 token 数和输出一致。详细记录写入 `build/qwen/web-comparison.json`。
 
